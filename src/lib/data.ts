@@ -18,27 +18,6 @@ export interface ModelUsage {
   cost: number;
 }
 
-export interface ToolUsage {
-  name: string;
-  calls: number;
-  tokens: number;
-}
-
-export interface MCPUsage {
-  server: string;
-  queries: number;
-  tokens: number;
-}
-
-export interface ProjectBreakdown {
-  name: string;
-  sessions: number;
-  avgSessionLength: string;
-  topTool: string;
-  topMCP: string;
-  tokens: number;
-}
-
 export const MOCK_USAGE_DATA: UsageData[] = [
   { date: "Feb 15", inputTokens: 120000, outputTokens: 15000, cacheTokens: 450000, cost: 0.85 },
   { date: "Feb 16", inputTokens: 150000, outputTokens: 18000, cacheTokens: 520000, cost: 1.10 },
@@ -60,30 +39,80 @@ export const MODEL_USAGE: ModelUsage[] = [
   { name: "claude-3-haiku", tokens: 450000, cost: 1.00 },
 ];
 
-export const TOOL_USAGE: ToolUsage[] = [
-  { name: "edit_file", calls: 342, tokens: 850000 },
-  { name: "view_file", calls: 512, tokens: 420000 },
-  { name: "shell_exec", calls: 128, tokens: 150000 },
-  { name: "read_url_content", calls: 45, tokens: 80000 },
-];
-
-export const MCP_USAGE: MCPUsage[] = [
-  { server: "github-mcp", queries: 156, tokens: 320000 },
-  { server: "postgres-mcp", queries: 89, tokens: 180000 },
-  { server: "jira-mcp", queries: 34, tokens: 50000 },
-];
-
-export const DETAILED_PROJECT_BREAKDOWN: ProjectBreakdown[] = [
-  { name: "e-commerce-platform", sessions: 42, avgSessionLength: "45m", topTool: "edit_file", topMCP: "postgres-mcp", tokens: 1250000 },
-  { name: "mobile-app-v2", sessions: 28, avgSessionLength: "32m", topTool: "view_file", topMCP: "github-mcp", tokens: 850000 },
-  { name: "internal-tools", sessions: 15, avgSessionLength: "18m", topTool: "shell_exec", topMCP: "jira-mcp", tokens: 450000 },
-];
-
-export const AI_INSIGHTS = [
-  "You are spending 45% of tokens on 'view_file' in 'mobile-app-v2'. Consider using targeted grep searches to reduce context window usage.",
-  "The 'postgres-mcp' server is heavily queried in 'e-commerce-platform'. Caching schema definitions could save ~$1.20/week.",
-  "Session lengths have increased by 20% this week, correlating with a 15% drop in error rates. Claude is successfully resolving complex tasks.",
-];
-
 export const TOTAL_CONTEXT_LIMIT = 200000; // 200k context window
 export const CURRENT_CONTEXT_USAGE = 145000; // Current usage
+
+export interface DetailedProjectAnalytics {
+  name: string;
+  sessions: number;
+  toolsUsed: { name: string; count: number }[];
+  pluginsUsed: { name: string; count: number }[];
+  mcpUsage: { name: string; requests: number }[];
+  skillsUsage: { name: string; count: number }[];
+}
+
+export const DETAILED_ANALYTICS: DetailedProjectAnalytics[] = [
+  {
+    name: "e-commerce-platform",
+    sessions: 42,
+    toolsUsed: [
+      { name: "Code Generation", count: 156 },
+      { name: "Refactoring", count: 89 },
+      { name: "Debugging", count: 45 },
+    ],
+    pluginsUsed: [
+      { name: "React Snippets", count: 120 },
+      { name: "Tailwind CSS", count: 85 },
+    ],
+    mcpUsage: [
+      { name: "Database Schema", requests: 34 },
+      { name: "API Docs", requests: 56 },
+    ],
+    skillsUsage: [
+      { name: "TypeScript", count: 210 },
+      { name: "React", count: 180 },
+      { name: "Node.js", count: 95 },
+    ],
+  },
+  {
+    name: "mobile-app-v2",
+    sessions: 28,
+    toolsUsed: [
+      { name: "Code Generation", count: 98 },
+      { name: "UI Components", count: 76 },
+      { name: "Testing", count: 32 },
+    ],
+    pluginsUsed: [
+      { name: "React Native", count: 145 },
+      { name: "Expo Tools", count: 67 },
+    ],
+    mcpUsage: [
+      { name: "Design System", requests: 45 },
+      { name: "API Docs", requests: 23 },
+    ],
+    skillsUsage: [
+      { name: "React Native", count: 160 },
+      { name: "TypeScript", count: 140 },
+      { name: "Jest", count: 45 },
+    ],
+  },
+  {
+    name: "internal-tools",
+    sessions: 15,
+    toolsUsed: [
+      { name: "Scripting", count: 65 },
+      { name: "Data Processing", count: 43 },
+    ],
+    pluginsUsed: [
+      { name: "Python Tools", count: 88 },
+    ],
+    mcpUsage: [
+      { name: "Internal Wiki", requests: 78 },
+    ],
+    skillsUsage: [
+      { name: "Python", count: 120 },
+      { name: "SQL", count: 85 },
+      { name: "Bash", count: 30 },
+    ],
+  },
+];

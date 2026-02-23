@@ -1,15 +1,7 @@
 import { motion } from "framer-motion";
-import { X, Download, FileText, BarChart2, PieChart, Lightbulb, Terminal, Database, Activity } from "lucide-react";
+import { X, Download, FileText, BarChart2, PieChart, Activity, Wrench, Puzzle, Layers, Code2 } from "lucide-react";
 import { UsageChart } from "./UsageChart";
-import { 
-  MOCK_USAGE_DATA, 
-  PROJECT_USAGE, 
-  MODEL_USAGE,
-  TOOL_USAGE,
-  MCP_USAGE,
-  DETAILED_PROJECT_BREAKDOWN,
-  AI_INSIGHTS
-} from "@/lib/data";
+import { MOCK_USAGE_DATA, PROJECT_USAGE, MODEL_USAGE, DETAILED_ANALYTICS } from "@/lib/data";
 
 interface DetailedReportProps {
   onClose: () => void;
@@ -31,8 +23,8 @@ export function DetailedReport({ onClose }: DetailedReportProps) {
               <FileText className="w-5 h-5 text-[#ffd60a]" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Intelligence Report</h2>
-              <p className="text-xs text-gray-400 font-mono">Claude Code Analytics & Insights</p>
+              <h2 className="text-lg font-semibold tracking-tight">Intelligence & Analytics Report</h2>
+              <p className="text-xs text-gray-400 font-mono">Billing Period: Oct 1 - Oct 31, 2023</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -49,22 +41,7 @@ export function DetailedReport({ onClose }: DetailedReportProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar">
-          {/* AI Insights Section */}
-          <div className="bg-gradient-to-r from-[#001d3d]/40 to-[#003566]/20 border border-[#003566]/50 p-5 rounded-xl">
-            <div className="flex items-center gap-2 mb-4 text-[#ffd60a]">
-              <Lightbulb className="w-5 h-5" />
-              <h3 className="text-sm font-bold uppercase tracking-wider">AI Insights & Optimization</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {AI_INSIGHTS.map((insight, idx) => (
-                <div key={idx} className="bg-[#000814]/50 p-4 rounded-lg border border-[#003566]/30">
-                  <p className="text-xs text-gray-300 leading-relaxed">{insight}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8 custom-scrollbar">
           {/* Top Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
@@ -78,107 +55,108 @@ export function DetailedReport({ onClose }: DetailedReportProps) {
               <p className="text-[10px] text-rose-400 mt-1">↑ 5% from last month</p>
             </div>
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
-              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Active Sessions</p>
-              <p className="text-2xl font-mono text-white">85</p>
-              <p className="text-[10px] text-emerald-400 mt-1">Avg length: 32m</p>
+              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Active Projects</p>
+              <p className="text-2xl font-mono text-white">{PROJECT_USAGE.length}</p>
+              <p className="text-[10px] text-gray-500 mt-1">Across 2 workspaces</p>
             </div>
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
-              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Tool Executions</p>
-              <p className="text-2xl font-mono text-white">1,027</p>
-              <p className="text-[10px] text-gray-500 mt-1">Across 4 unique tools</p>
+              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Total Sessions</p>
+              <p className="text-2xl font-mono text-white">
+                {DETAILED_ANALYTICS.reduce((acc, curr) => acc + curr.sessions, 0)}
+              </p>
+              <p className="text-[10px] text-emerald-400 mt-1">↑ 18% from last month</p>
             </div>
           </div>
 
-          {/* Tools & MCP Usage */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Tools Table */}
-            <div className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl overflow-hidden">
-              <div className="p-4 border-b border-[#003566]/50 flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-[#ffd60a]" />
-                <h3 className="text-sm font-medium">Claude Code Tools Usage</h3>
-              </div>
-              <div className="p-0">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#001d3d]/40 text-gray-400">
-                    <tr>
-                      <th className="px-4 py-2 font-medium">Tool Name</th>
-                      <th className="px-4 py-2 font-medium text-right">Calls</th>
-                      <th className="px-4 py-2 font-medium text-right">Tokens</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#003566]/30">
-                    {TOOL_USAGE.map((tool) => (
-                      <tr key={tool.name} className="hover:bg-[#001d3d]/30 transition-colors">
-                        <td className="px-4 py-3 text-gray-200 font-mono">{tool.name}</td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-400">{tool.calls}</td>
-                        <td className="px-4 py-3 text-right font-mono text-[#ffd60a]">{(tool.tokens / 1000).toFixed(1)}k</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* MCP Table */}
-            <div className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl overflow-hidden">
-              <div className="p-4 border-b border-[#003566]/50 flex items-center gap-2">
-                <Database className="w-4 h-4 text-[#ffd60a]" />
-                <h3 className="text-sm font-medium">MCP Server Usage</h3>
-              </div>
-              <div className="p-0">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#001d3d]/40 text-gray-400">
-                    <tr>
-                      <th className="px-4 py-2 font-medium">Server</th>
-                      <th className="px-4 py-2 font-medium text-right">Queries</th>
-                      <th className="px-4 py-2 font-medium text-right">Tokens</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#003566]/30">
-                    {MCP_USAGE.map((mcp) => (
-                      <tr key={mcp.server} className="hover:bg-[#001d3d]/30 transition-colors">
-                        <td className="px-4 py-3 text-gray-200 font-mono">{mcp.server}</td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-400">{mcp.queries}</td>
-                        <td className="px-4 py-3 text-right font-mono text-[#ffd60a]">{(mcp.tokens / 1000).toFixed(1)}k</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* Project Breakdown Table */}
-          <div className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl overflow-hidden">
-            <div className="p-4 border-b border-[#003566]/50 flex items-center gap-2">
+          {/* Chart */}
+          <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
+            <div className="flex items-center gap-2 mb-4">
               <Activity className="w-4 h-4 text-[#ffd60a]" />
-              <h3 className="text-sm font-medium">Project Breakdown & Session Trends</h3>
+              <h3 className="text-sm font-medium">30-Day Usage Trend</h3>
             </div>
-            <div className="p-0 overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[600px]">
-                <thead className="bg-[#001d3d]/40 text-gray-400">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Project</th>
-                    <th className="px-4 py-3 font-medium text-right">Sessions</th>
-                    <th className="px-4 py-3 font-medium text-right">Avg Length</th>
-                    <th className="px-4 py-3 font-medium">Top Tool</th>
-                    <th className="px-4 py-3 font-medium">Top MCP</th>
-                    <th className="px-4 py-3 font-medium text-right">Tokens</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#003566]/30">
-                  {DETAILED_PROJECT_BREAKDOWN.map((project) => (
-                    <tr key={project.name} className="hover:bg-[#001d3d]/30 transition-colors">
-                      <td className="px-4 py-3 text-gray-200 font-medium">{project.name}</td>
-                      <td className="px-4 py-3 text-right font-mono text-gray-400">{project.sessions}</td>
-                      <td className="px-4 py-3 text-right font-mono text-gray-400">{project.avgSessionLength}</td>
-                      <td className="px-4 py-3 font-mono text-gray-400">{project.topTool}</td>
-                      <td className="px-4 py-3 font-mono text-gray-400">{project.topMCP}</td>
-                      <td className="px-4 py-3 text-right font-mono text-[#ffd60a]">{(project.tokens / 1000).toFixed(1)}k</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="h-[250px]">
+              <UsageChart data={MOCK_USAGE_DATA} />
+            </div>
+          </div>
+
+          {/* Project Breakdown */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Layers className="w-5 h-5 text-[#ffd60a]" />
+              <h3 className="text-lg font-semibold">Project Insights</h3>
+            </div>
+            
+            <div className="space-y-6">
+              {DETAILED_ANALYTICS.map((project) => (
+                <div key={project.name} className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-5">
+                  <div className="flex justify-between items-center border-b border-[#003566]/50 pb-3 mb-4">
+                    <h4 className="text-base font-medium text-[#ffd60a]">{project.name}</h4>
+                    <span className="text-xs font-mono text-gray-400">{project.sessions} Sessions</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Tools Used */}
+                    <div>
+                      <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                        <Wrench className="w-3 h-3" /> Tools
+                      </h5>
+                      <ul className="space-y-2">
+                        {project.toolsUsed.map(tool => (
+                          <li key={tool.name} className="flex justify-between text-xs">
+                            <span className="text-gray-300">{tool.name}</span>
+                            <span className="font-mono text-[#ffd60a]">{tool.count}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Plugins Used */}
+                    <div>
+                      <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                        <Puzzle className="w-3 h-3" /> Plugins
+                      </h5>
+                      <ul className="space-y-2">
+                        {project.pluginsUsed.map(plugin => (
+                          <li key={plugin.name} className="flex justify-between text-xs">
+                            <span className="text-gray-300">{plugin.name}</span>
+                            <span className="font-mono text-[#ffd60a]">{plugin.count}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* MCP Usage */}
+                    <div>
+                      <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                        <BarChart2 className="w-3 h-3" /> MCP
+                      </h5>
+                      <ul className="space-y-2">
+                        {project.mcpUsage.map(mcp => (
+                          <li key={mcp.name} className="flex justify-between text-xs">
+                            <span className="text-gray-300">{mcp.name}</span>
+                            <span className="font-mono text-[#ffd60a]">{mcp.requests}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Skills Usage */}
+                    <div>
+                      <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                        <Code2 className="w-3 h-3" /> Skills
+                      </h5>
+                      <ul className="space-y-2">
+                        {project.skillsUsage.map(skill => (
+                          <li key={skill.name} className="flex justify-between text-xs">
+                            <span className="text-gray-300">{skill.name}</span>
+                            <span className="font-mono text-[#ffd60a]">{skill.count}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

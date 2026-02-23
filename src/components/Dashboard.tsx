@@ -7,7 +7,11 @@ import { PROJECT_USAGE, MODEL_USAGE, CURRENT_CONTEXT_USAGE, TOTAL_CONTEXT_LIMIT,
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function Dashboard({ onOpenDetailedReport }: { onOpenDetailedReport: () => void }) {
+interface DashboardProps {
+  onOpenDetailedReport?: () => void;
+}
+
+export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
   const [viewMode, setViewMode] = useState<"projects" | "models">("projects");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
