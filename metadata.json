@@ -1,0 +1,5 @@
+{
+  "name": "Claude Code Usage Dashboard",
+  "description": "A macOS menubar-style application to visualize Claude Code usage costs and trends.",
+  "requestFramePermissions": []
+}
