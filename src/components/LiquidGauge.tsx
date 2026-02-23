@@ -48,7 +48,7 @@ export function LiquidGauge({ percentage, className, isError = false }: LiquidGa
           <motion.path
             fill="url(#liquidGradient)"
             fillOpacity="0.6"
-            d="M -100 0 Q -75 12 -50 0 T 0 0 Q 25 12 50 0 T 100 0 Q 125 12 150 0 T 200 0 V 200 H -100 Z"
+            d="M -200 0 Q -175 12 -150 0 T -100 0 Q -75 12 -50 0 T 0 0 Q 25 12 50 0 T 100 0 Q 125 12 150 0 T 200 0 Q 225 12 250 0 T 300 0 V 200 H -200 Z"
             animate={{ x: [-100, 0] }}
             transition={{ repeat: Infinity, duration: 5, ease: "linear" }}
             initial={{ y: yOffset + 5 }}
@@ -58,7 +58,7 @@ export function LiquidGauge({ percentage, className, isError = false }: LiquidGa
           {/* Front Wave */}
           <motion.path
             fill="url(#liquidGradient)"
-            d="M -100 0 Q -75 15 -50 0 T 0 0 Q 25 15 50 0 T 100 0 Q 125 15 150 0 T 200 0 V 200 H -100 Z"
+            d="M -200 0 Q -175 15 -150 0 T -100 0 Q -75 15 -50 0 T 0 0 Q 25 15 50 0 T 100 0 Q 125 15 150 0 T 200 0 Q 225 15 250 0 T 300 0 V 200 H -200 Z"
             animate={{ x: [-100, 0] }}
             transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
             initial={{ y: yOffset }}
@@ -73,15 +73,6 @@ export function LiquidGauge({ percentage, className, isError = false }: LiquidGa
           stroke="#003566" 
           strokeWidth="4"
           className="z-20"
-        />
-        
-        {/* Highlight */}
-        <path
-          d="M25,20 Q30,20 30,130"
-          fill="none"
-          stroke="rgba(255,255,255,0.3)"
-          strokeWidth="2"
-          strokeLinecap="round"
         />
       </svg>
       
