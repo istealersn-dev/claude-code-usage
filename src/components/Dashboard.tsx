@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { DetailedReport } from "./DetailedReport";
+import { SettingsModal } from "./SettingsModal";
 import { PROJECT_USAGE, MODEL_USAGE, CURRENT_CONTEXT_USAGE, TOTAL_CONTEXT_LIMIT, MOCK_USAGE_DATA } from "@/lib/data";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -11,11 +12,22 @@ interface DashboardProps {
   onOpenDetailedReport?: () => void;
 }
 
+const DURATIONS = [
+  { label: "1h", value: "1h" },
+  { label: "1d", value: "1d" },
+  { label: "3d", value: "3d" },
+  { label: "1w", value: "1w" },
+  { label: "1m", value: "1m" },
+  { label: "Custom", value: "custom" },
+];
+
 export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
   const [viewMode, setViewMode] = useState<"projects" | "models">("projects");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [duration, setDuration] = useState("1w");
+  const [showSettings, setShowSettings] = useState(false);
   
   // State for data to simulate updates
   const [contextUsage, setContextUsage] = useState(CURRENT_CONTEXT_USAGE);
@@ -57,53 +69,80 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
   };
 
   return (
-    <>
-      <motion.div
-        initial={{ opacity: 0, y: -20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -20, scale: 0.95 }}
-        transition={{ duration: 0.2 }}
-        className="w-[360px] sm:w-[400px] max-h-[calc(100vh-50px)] flex flex-col bg-[#000814]/90 backdrop-blur-xl border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
-      >
-        {/* Header */}
-        <div className="shrink-0 bg-[#001d3d]/50 p-3 sm:p-4 border-b border-[#003566] flex justify-between items-center">
-          <h2 className="text-xs sm:text-sm font-semibold tracking-wide uppercase text-[#ffd60a] flex items-center gap-2">
-            <Zap className="w-4 h-4" /> Claude Code Usage
-          </h2>
-          <div className="flex items-center gap-3">
-              <AnimatePresence mode="wait">
-                {error ? (
-                  <motion.span
-                    key="error"
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="text-[10px] sm:text-xs text-red-400 font-mono"
-                  >
-                    {error}
-                  </motion.span>
-                ) : (
-                  <motion.span
-                    key="cost"
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="text-[10px] sm:text-xs text-gray-400 font-mono"
-                  >
-                    ${totalCost.toFixed(2)} this month
-                  </motion.span>
-                )}
-              </AnimatePresence>
-              <div className="flex items-center gap-2 text-gray-400">
-                  <RefreshCw 
-                    className={cn(
-                      "w-3 h-3 hover:text-white cursor-pointer transition-all",
-                      isRefreshing && "animate-spin text-[#ffd60a]"
-                    )} 
-                    onClick={handleRefresh}
-                  />
-                  <Settings className="w-3 h-3 hover:text-white cursor-pointer transition-colors" />
+    <motion.div
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+      className="relative w-[360px] sm:w-[400px] max-h-[calc(100vh-50px)] flex flex-col bg-[#000814]/90 backdrop-blur-xl border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
+    >
+      {/* Header */}
+        <div className="shrink-0 bg-[#001d3d]/50 border-b border-[#003566] flex flex-col">
+          <div className="p-3 sm:p-4 pb-2 flex justify-between items-center">
+            <h2 className="text-xs sm:text-sm font-semibold tracking-wide uppercase text-[#ffd60a] flex items-center gap-2">
+              <Zap className="w-4 h-4" /> Claude Code Usage
+            </h2>
+            <div className="flex items-center gap-3">
+                <AnimatePresence mode="wait">
+                  {error ? (
+                    <motion.span
+                      key="error"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="text-[10px] sm:text-xs text-red-400 font-mono"
+                    >
+                      {error}
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key="cost"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="text-[10px] sm:text-xs text-gray-400 font-mono"
+                    >
+                      ${totalCost.toFixed(2)} this month
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <div className="flex items-center gap-2 text-gray-400">
+                    <RefreshCw 
+                      className={cn(
+                        "w-3 h-3 hover:text-white cursor-pointer transition-all",
+                        isRefreshing && "animate-spin text-[#ffd60a]"
+                      )} 
+                      onClick={handleRefresh}
+                    />
+                    <Settings 
+                      className="w-3 h-3 hover:text-white cursor-pointer transition-colors" 
+                      onClick={() => setShowSettings(true)}
+                    />
+                </div>
+            </div>
+          </div>
+          
+          {/* Duration Dropdown */}
+          <div className="px-3 sm:px-4 pb-3 flex items-center justify-between">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Timeframe</span>
+            <div className="relative">
+              <select
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                className="bg-[#000814] border border-[#003566] text-white text-[10px] sm:text-xs font-medium rounded-md pl-3 pr-8 py-1.5 outline-none focus:border-[#ffd60a] transition-colors cursor-pointer appearance-none shadow-sm"
+              >
+                {DURATIONS.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#ffd60a]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
               </div>
+            </div>
           </div>
         </div>
 
@@ -254,7 +293,12 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
             View Detailed Report
           </button>
         </div>
+
+        <AnimatePresence>
+          {showSettings && (
+            <SettingsModal onClose={() => setShowSettings(false)} />
+          )}
+        </AnimatePresence>
       </motion.div>
-    </>
   );
 }
