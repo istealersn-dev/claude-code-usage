@@ -3,10 +3,12 @@ import { Dashboard } from "./Dashboard";
 import { DetailedReport } from "./DetailedReport";
 import { Command, BatteryCharging, Wifi, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Provider } from "@/lib/data";
 
 export function Menubar() {
   const [isOpen, setIsOpen] = useState(false);
   const [showDetailedReport, setShowDetailedReport] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<Provider>("claude");
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,7 +28,8 @@ export function Menubar() {
     };
   }, [menuRef]);
 
-  const handleOpenDetailedReport = () => {
+  const handleOpenDetailedReport = (provider: Provider) => {
+    setSelectedProvider(provider);
     setIsOpen(false);
     setShowDetailedReport(true);
   };
@@ -37,7 +40,7 @@ export function Menubar() {
         {/* Left Side: Apple Logo & App Name */}
         <div className="flex items-center gap-4 text-xs font-medium">
           <span className="font-bold tracking-tight text-sm"></span>
-          <span className="font-semibold">Claude Code</span>
+          <span className="font-semibold">AI Pulse</span>
           <span className="opacity-70 hover:opacity-100 cursor-default hidden sm:inline-block">File</span>
           <span className="opacity-70 hover:opacity-100 cursor-default hidden sm:inline-block">Edit</span>
           <span className="opacity-70 hover:opacity-100 cursor-default hidden sm:inline-block">View</span>
@@ -85,7 +88,7 @@ export function Menubar() {
 
       <AnimatePresence>
         {showDetailedReport && (
-          <DetailedReport onClose={() => setShowDetailedReport(false)} />
+          <DetailedReport provider={selectedProvider} onClose={() => setShowDetailedReport(false)} />
         )}
       </AnimatePresence>
     </>

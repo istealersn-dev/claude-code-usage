@@ -12,9 +12,10 @@ import { UsageData } from "@/lib/data";
 
 interface UsageChartProps {
   data: UsageData[];
+  color?: string;
 }
 
-export function UsageChart({ data }: UsageChartProps) {
+export function UsageChart({ data, color = "#ffd60a" }: UsageChartProps) {
   return (
     <div className="h-[200px] w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -32,8 +33,8 @@ export function UsageChart({ data }: UsageChartProps) {
               <stop offset="95%" stopColor="#001d3d" stopOpacity={0}/>
             </linearGradient>
             <linearGradient id="colorOutput" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#ffd60a" stopOpacity={0.8}/>
-              <stop offset="95%" stopColor="#ffd60a" stopOpacity={0}/>
+              <stop offset="5%" stopColor={color} stopOpacity={0.8}/>
+              <stop offset="95%" stopColor={color} stopOpacity={0}/>
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
@@ -89,7 +90,7 @@ export function UsageChart({ data }: UsageChartProps) {
             type="monotone" 
             dataKey="outputTokens" 
             name="Output" 
-            stroke="#ffd60a" 
+            stroke={color} 
             fillOpacity={1} 
             fill="url(#colorOutput)" 
             stackId="1"

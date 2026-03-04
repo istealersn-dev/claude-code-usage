@@ -8,13 +8,13 @@ export default function App() {
       {/* Desktop Simulation Content */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 select-none">
         <h1 className="text-9xl font-black tracking-tighter text-[#003566] mix-blend-overlay">
-          CLAUDE
+          AI PULSE
         </h1>
       </div>
 
       <div className="absolute bottom-10 left-10 text-xs text-gray-500 font-mono">
         <p>macOS Simulation Environment</p>
-        <p>Claude Code Usage Dashboard Preview</p>
+        <p>AI Pulse Usage Dashboard Preview</p>
       </div>
     </div>
   );

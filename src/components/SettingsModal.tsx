@@ -1,11 +1,14 @@
 import { motion } from "framer-motion";
 import { X, Bell, Key, Palette, HardDrive, Shield } from "lucide-react";
+import { PROVIDERS, Provider } from "@/lib/data";
 
 interface SettingsModalProps {
+  provider: Provider;
   onClose: () => void;
 }
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export function SettingsModal({ provider, onClose }: SettingsModalProps) {
+  const providerData = PROVIDERS[provider];
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -30,18 +33,18 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           
           {/* API Keys */}
           <div className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-[#001d3d]/40 transition-colors">
-            <div className="p-2 bg-[#003566] rounded-lg text-[#ffd60a]">
+            <div className="p-2 bg-[#003566] rounded-lg" style={{ color: providerData.themeColor }}>
               <Key className="w-4 h-4" />
             </div>
             <div className="flex-1">
               <h3 className="text-xs font-medium text-white">API Keys</h3>
-              <p className="text-[10px] text-gray-400">Manage Anthropic API keys</p>
+              <p className="text-[10px] text-gray-400">Manage {providerData.name} API keys</p>
             </div>
           </div>
 
           {/* Budget Alerts */}
           <div className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-[#001d3d]/40 transition-colors">
-            <div className="p-2 bg-[#003566] rounded-lg text-[#ffd60a]">
+            <div className="p-2 bg-[#003566] rounded-lg" style={{ color: providerData.themeColor }}>
               <Bell className="w-4 h-4" />
             </div>
             <div className="flex-1">
@@ -52,7 +55,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           {/* Data & Privacy */}
           <div className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-[#001d3d]/40 transition-colors">
-            <div className="p-2 bg-[#003566] rounded-lg text-[#ffd60a]">
+            <div className="p-2 bg-[#003566] rounded-lg" style={{ color: providerData.themeColor }}>
               <Shield className="w-4 h-4" />
             </div>
             <div className="flex-1">
@@ -63,7 +66,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           {/* Appearance */}
           <div className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-[#001d3d]/40 transition-colors">
-            <div className="p-2 bg-[#003566] rounded-lg text-[#ffd60a]">
+            <div className="p-2 bg-[#003566] rounded-lg" style={{ color: providerData.themeColor }}>
               <Palette className="w-4 h-4" />
             </div>
             <div className="flex-1">
@@ -74,7 +77,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           {/* Storage */}
           <div className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:bg-[#001d3d]/40 transition-colors">
-            <div className="p-2 bg-[#003566] rounded-lg text-[#ffd60a]">
+            <div className="p-2 bg-[#003566] rounded-lg" style={{ color: providerData.themeColor }}>
               <HardDrive className="w-4 h-4" />
             </div>
             <div className="flex-1">

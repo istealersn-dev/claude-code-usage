@@ -1,15 +1,15 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { DetailedReport } from "./DetailedReport";
 import { SettingsModal } from "./SettingsModal";
-import { PROJECT_USAGE, MODEL_USAGE, CURRENT_CONTEXT_USAGE, TOTAL_CONTEXT_LIMIT, MOCK_USAGE_DATA } from "@/lib/data";
-import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Settings } from "lucide-react";
+import { PROVIDERS, Provider } from "@/lib/data";
+import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Settings, Code2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DashboardProps {
-  onOpenDetailedReport?: () => void;
+  onOpenDetailedReport?: (provider: Provider) => void;
 }
 
 const DURATIONS = [
@@ -22,6 +22,7 @@ const DURATIONS = [
 ];
 
 export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
+  const [provider, setProvider] = useState<Provider>("claude");
   const [viewMode, setViewMode] = useState<"projects" | "models">("projects");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -29,12 +30,22 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
   const [duration, setDuration] = useState("1w");
   const [showSettings, setShowSettings] = useState(false);
   
+  const providerData = PROVIDERS[provider];
+  
   // State for data to simulate updates
-  const [contextUsage, setContextUsage] = useState(CURRENT_CONTEXT_USAGE);
-  const [usageData, setUsageData] = useState(MOCK_USAGE_DATA);
+  const [contextUsage, setContextUsage] = useState(providerData.currentUsage);
+  const [usageData, setUsageData] = useState(providerData.usageData);
 
-  const contextPercentage = (contextUsage / TOTAL_CONTEXT_LIMIT) * 100;
-  const totalCost = PROJECT_USAGE.reduce((acc, curr) => acc + curr.cost, 0);
+  // Update state when provider changes
+  useEffect(() => {
+    setContextUsage(providerData.currentUsage);
+    setUsageData(providerData.usageData);
+  }, [provider, providerData]);
+
+  const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
+  const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
+
+  const ProviderIcon = provider === 'claude' ? Zap : provider === 'codex' ? Code2 : Sparkles;
 
   const handleRefresh = () => {
     if (isRefreshing) return;
@@ -53,10 +64,10 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
 
       // Randomize context usage slightly (+/- 5%)
       const randomFactor = 0.95 + Math.random() * 0.1;
-      setContextUsage(Math.min(TOTAL_CONTEXT_LIMIT, Math.max(0, CURRENT_CONTEXT_USAGE * randomFactor)));
+      setContextUsage(Math.min(providerData.contextLimit, Math.max(0, providerData.currentUsage * randomFactor)));
       
       // Randomize last day of usage data
-      const newData = [...usageData];
+      const newData = [...providerData.usageData];
       const lastDay = { ...newData[newData.length - 1] };
       lastDay.inputTokens = Math.floor(lastDay.inputTokens * (0.9 + Math.random() * 0.2));
       lastDay.outputTokens = Math.floor(lastDay.outputTokens * (0.9 + Math.random() * 0.2));
@@ -75,13 +86,24 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
       exit={{ opacity: 0, y: -20, scale: 0.95 }}
       transition={{ duration: 0.2 }}
       className="relative w-[360px] sm:w-[400px] max-h-[calc(100vh-50px)] flex flex-col bg-[#000814]/90 backdrop-blur-xl border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
+      style={{ '--theme-color': providerData.themeColor } as React.CSSProperties}
     >
       {/* Header */}
         <div className="shrink-0 bg-[#001d3d]/50 border-b border-[#003566] flex flex-col">
           <div className="p-3 sm:p-4 pb-2 flex justify-between items-center">
-            <h2 className="text-xs sm:text-sm font-semibold tracking-wide uppercase text-[#ffd60a] flex items-center gap-2">
-              <Zap className="w-4 h-4" /> Claude Code Usage
-            </h2>
+            <div className="flex items-center gap-2">
+              <ProviderIcon className="w-4 h-4" style={{ color: providerData.themeColor }} />
+              <select
+                value={provider}
+                onChange={(e) => setProvider(e.target.value as Provider)}
+                className="bg-transparent text-xs sm:text-sm font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none"
+                style={{ color: providerData.themeColor }}
+              >
+                <option value="claude">Claude Code</option>
+                <option value="codex">OpenAI Codex</option>
+                <option value="gemini">Google Gemini</option>
+              </select>
+            </div>
             <div className="flex items-center gap-3">
                 <AnimatePresence mode="wait">
                   {error ? (
@@ -129,7 +151,8 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
               <select
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
-                className="bg-[#000814] border border-[#003566] text-white text-[10px] sm:text-xs font-medium rounded-md pl-3 pr-8 py-1.5 outline-none focus:border-[#ffd60a] transition-colors cursor-pointer appearance-none shadow-sm"
+                className="bg-[#000814] border border-[#003566] text-white text-[10px] sm:text-xs font-medium rounded-md pl-3 pr-8 py-1.5 outline-none transition-colors cursor-pointer appearance-none shadow-sm"
+                style={{ outlineColor: providerData.themeColor }}
               >
                 {DURATIONS.map((d) => (
                   <option key={d.value} value={d.value}>
@@ -137,7 +160,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                   </option>
                 ))}
               </select>
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#ffd60a]">
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: providerData.themeColor }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="m6 9 6 6 6-6"/>
                 </svg>
@@ -150,30 +173,30 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
           {/* Top Section: Liquid Gauge & Key Stats */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1 flex flex-col items-center">
-               <div key={`gauge-wrapper-${refreshKey}`}>
-                  <LiquidGauge percentage={contextPercentage} isError={!!error} />
+               <div key={`gauge-wrapper-${refreshKey}-${provider}`}>
+                  <LiquidGauge percentage={contextPercentage} isError={!!error} color={providerData.themeColor} darkColor={providerData.themeDark} />
                </div>
                <div className="mt-2 text-center">
                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">Context Limit</p>
                  <p className="text-xs font-mono text-white">
-                   {(contextUsage / 1000).toFixed(0)}k / {(TOTAL_CONTEXT_LIMIT / 1000).toFixed(0)}k
+                   {(contextUsage / 1000).toFixed(0)}k / {(providerData.contextLimit / 1000).toFixed(0)}k
                  </p>
                </div>
             </div>
             
             <div className="flex-1 space-y-2 sm:space-y-3">
                <div className="bg-[#001d3d]/40 p-2 sm:p-3 rounded-xl border border-[#003566]/50">
-                 <div className="flex items-center gap-2 mb-1 text-[#ffd60a]">
+                 <div className="flex items-center gap-2 mb-1" style={{ color: providerData.themeColor }}>
                    <TrendingUp className="w-3 h-3" />
                    <span className="text-[10px] uppercase font-bold">Trend</span>
                  </div>
                  <p className="text-[10px] sm:text-xs text-gray-300 leading-tight">
-                   Usage up <span className="text-[#ffd60a] font-bold">12%</span> from last week.
+                   Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>12%</span> from last week.
                  </p>
                </div>
                
                <div className="bg-[#001d3d]/40 p-2 sm:p-3 rounded-xl border border-[#003566]/50">
-                 <div className="flex items-center gap-2 mb-1 text-[#ffd60a]">
+                 <div className="flex items-center gap-2 mb-1" style={{ color: providerData.themeColor }}>
                    <DollarSign className="w-3 h-3" />
                    <span className="text-[10px] uppercase font-bold">Projected</span>
                  </div>
@@ -189,8 +212,8 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
               <TrendingUp className="w-3 h-3" /> 7-Day Token Trend
             </h3>
-            <div key={`chart-wrapper-${refreshKey}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
-              <UsageChart data={usageData} />
+            <div key={`chart-wrapper-${refreshKey}-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
+              <UsageChart data={usageData} color={providerData.themeColor} />
             </div>
           </div>
 
@@ -203,9 +226,10 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                   className={cn(
                     "px-3 py-1 text-[10px] uppercase font-bold rounded-md transition-all flex items-center gap-1",
                     viewMode === "projects" 
-                      ? "bg-[#003566] text-[#ffd60a] shadow-sm" 
+                      ? "bg-[#003566] shadow-sm" 
                       : "text-gray-400 hover:text-white"
                   )}
+                  style={viewMode === "projects" ? { color: providerData.themeColor } : {}}
                 >
                   <Layers className="w-3 h-3" /> Projects
                 </button>
@@ -214,9 +238,10 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                   className={cn(
                     "px-3 py-1 text-[10px] uppercase font-bold rounded-md transition-all flex items-center gap-1",
                     viewMode === "models" 
-                      ? "bg-[#003566] text-[#ffd60a] shadow-sm" 
+                      ? "bg-[#003566] shadow-sm" 
                       : "text-gray-400 hover:text-white"
                   )}
+                  style={viewMode === "models" ? { color: providerData.themeColor } : {}}
                 >
                   <Box className="w-3 h-3" /> Models
                 </button>
@@ -234,22 +259,22 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                     transition={{ duration: 0.2 }}
                     className="space-y-1 sm:space-y-2"
                   >
-                    {PROJECT_USAGE.map((project) => (
+                    {providerData.projectUsage.map((project) => (
                       <div key={project.name} className="relative flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
                         {/* Tooltip */}
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-[#000814] border border-[#003566] text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl translate-y-2 group-hover:translate-y-0">
-                          <span className="text-[#ffd60a] font-mono">{(project.tokens / 1000).toFixed(0)}k</span> tokens
+                          <span className="font-mono" style={{ color: providerData.themeColor }}>{(project.tokens / 1000).toFixed(0)}k</span> tokens
                           <span className="mx-1 text-gray-500">•</span>
                           <span className="text-white font-mono">${project.cost.toFixed(2)}</span>
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#003566] group-hover:bg-[#ffd60a] transition-colors" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
                           <span className="text-gray-300 group-hover:text-white transition-colors">
                             {project.name}
                           </span>
                         </div>
-                        <span className="font-mono text-[#ffd60a] opacity-80 group-hover:opacity-100">
+                        <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
                           ${project.cost.toFixed(2)}
                         </span>
                       </div>
@@ -264,15 +289,15 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                     transition={{ duration: 0.2 }}
                     className="space-y-1 sm:space-y-2"
                   >
-                    {MODEL_USAGE.map((model) => (
+                    {providerData.modelUsage.map((model) => (
                       <div key={model.name} className="flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
                         <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#003566] group-hover:bg-[#ffd60a] transition-colors" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
                           <span className="text-gray-300 group-hover:text-white transition-colors">
                             {model.name}
                           </span>
                         </div>
-                        <span className="font-mono text-[#ffd60a] opacity-80 group-hover:opacity-100">
+                        <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
                           ${model.cost.toFixed(2)}
                         </span>
                       </div>
@@ -287,8 +312,9 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
         {/* Footer */}
         <div className="shrink-0 bg-[#000814] p-3 border-t border-[#003566] text-center">
           <button 
-            onClick={onOpenDetailedReport}
-            className="text-[10px] text-[#003566] hover:text-[#ffd60a] transition-colors uppercase tracking-widest font-bold"
+            onClick={() => onOpenDetailedReport?.(provider)}
+            className="text-[10px] text-[#003566] transition-colors uppercase tracking-widest font-bold"
+            style={{ color: providerData.themeColor }}
           >
             View Detailed Report
           </button>
@@ -296,7 +322,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
 
         <AnimatePresence>
           {showSettings && (
-            <SettingsModal onClose={() => setShowSettings(false)} />
+            <SettingsModal provider={provider} onClose={() => setShowSettings(false)} />
           )}
         </AnimatePresence>
       </motion.div>

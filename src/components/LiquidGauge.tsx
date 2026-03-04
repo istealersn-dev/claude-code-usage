@@ -5,9 +5,11 @@ interface LiquidGaugeProps {
   percentage: number;
   className?: string;
   isError?: boolean;
+  color?: string;
+  darkColor?: string;
 }
 
-export function LiquidGauge({ percentage, className, isError = false }: LiquidGaugeProps) {
+export function LiquidGauge({ percentage, className, isError = false, color = "#ffd60a", darkColor = "#ffc300" }: LiquidGaugeProps) {
   const clampedPercentage = Math.min(Math.max(percentage, 0), 100);
   
   // The height of the bottle fill area is roughly 140 units (from y=150 to y=10)
@@ -25,8 +27,8 @@ export function LiquidGauge({ percentage, className, isError = false }: LiquidGa
       >
         <defs>
           <linearGradient id="liquidGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor={isError ? "#ef4444" : "#ffd60a"} />
-            <stop offset="100%" stopColor={isError ? "#b91c1c" : "#ffc300"} />
+            <stop offset="0%" stopColor={isError ? "#ef4444" : color} />
+            <stop offset="100%" stopColor={isError ? "#b91c1c" : darkColor} />
           </linearGradient>
           
           <clipPath id="bottleClip">

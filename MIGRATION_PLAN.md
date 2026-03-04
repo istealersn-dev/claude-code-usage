@@ -1,6 +1,6 @@
 # Migration Plan: Rebuilding as a Native macOS App using Tauri
 
-This document outlines the step-by-step process for migrating the current web-based Claude Code Usage Dashboard simulation into a native macOS Menubar application using **Tauri**. The goal is to retain the exact UI and animations while replacing the simulated environment with native OS integration.
+This document outlines the step-by-step process for migrating the current web-based AI Pulse (formerly Claude Pulse) Usage Dashboard simulation into a native macOS Menubar application using **Tauri**. The goal is to retain the exact UI and animations while replacing the simulated environment with native OS integration.
 
 ## 1. Prerequisites & Setup
 
@@ -21,8 +21,8 @@ Since the current project is already a Vite + React application, we can easily i
    ```bash
    npx tauri init
    ```
-   - *App name*: `Claude Code Usage`
-   - *Window title*: `Claude Code Usage`
+   - *App name*: `AI Pulse`
+   - *Window title*: `AI Pulse`
    - *Web assets*: `../dist`
    - *Dev server URL*: `http://localhost:3000` (or your Vite dev port)
    - *Frontend dev command*: `npm run dev`
@@ -38,7 +38,7 @@ Modify the window configuration to be frameless, transparent, and hidden on star
 "tauri": {
   "windows": [
     {
-      "title": "Claude Code Usage",
+      "title": "AI Pulse",
       "width": 400,
       "height": 600,
       "decorations": false,
