@@ -3,23 +3,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { DetailedReport } from "./DetailedReport";
-import { SettingsModal } from "./SettingsModal";
 import { PROVIDERS, Provider } from "@/lib/data";
-import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Settings, Code2, Sparkles } from "lucide-react";
+import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DashboardProps {
   onOpenDetailedReport?: (provider: Provider) => void;
 }
-
-const DURATIONS = [
-  { label: "1h", value: "1h" },
-  { label: "1d", value: "1d" },
-  { label: "3d", value: "3d" },
-  { label: "1w", value: "1w" },
-  { label: "1m", value: "1m" },
-  { label: "Custom", value: "custom" },
-];
 
 export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
   const [provider, setProvider] = useState<Provider>("claude");
@@ -27,8 +17,6 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [duration, setDuration] = useState("1w");
-  const [showSettings, setShowSettings] = useState(false);
   
   const providerData = PROVIDERS[provider];
   
@@ -99,7 +87,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                 className="bg-transparent text-xs sm:text-sm font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none"
                 style={{ color: providerData.themeColor }}
               >
-                <option value="claude">Claude Code</option>
+                <option value="claude">AI Pulse</option>
                 <option value="codex">OpenAI Codex</option>
                 <option value="gemini">Google Gemini</option>
               </select>
@@ -136,35 +124,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                       )} 
                       onClick={handleRefresh}
                     />
-                    <Settings 
-                      className="w-3 h-3 hover:text-white cursor-pointer transition-colors" 
-                      onClick={() => setShowSettings(true)}
-                    />
                 </div>
-            </div>
-          </div>
-          
-          {/* Duration Dropdown */}
-          <div className="px-3 sm:px-4 pb-3 flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Timeframe</span>
-            <div className="relative">
-              <select
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="bg-[#000814] border border-[#003566] text-white text-[10px] sm:text-xs font-medium rounded-md pl-3 pr-8 py-1.5 outline-none transition-colors cursor-pointer appearance-none shadow-sm"
-                style={{ outlineColor: providerData.themeColor }}
-              >
-                {DURATIONS.map((d) => (
-                  <option key={d.value} value={d.value}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: providerData.themeColor }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m6 9 6 6 6-6"/>
-                </svg>
-              </div>
             </div>
           </div>
         </div>
@@ -319,12 +279,6 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
             View Detailed Report
           </button>
         </div>
-
-        <AnimatePresence>
-          {showSettings && (
-            <SettingsModal provider={provider} onClose={() => setShowSettings(false)} />
-          )}
-        </AnimatePresence>
       </motion.div>
   );
 }

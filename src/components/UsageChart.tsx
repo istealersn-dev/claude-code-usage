@@ -67,6 +67,7 @@ export function UsageChart({ data, color = "#ffd60a" }: UsageChartProps) {
             wrapperStyle={{ fontSize: "10px", paddingTop: "10px" }}
             iconType="circle"
             iconSize={8}
+            formatter={(value) => <span style={{ color: "rgba(255,255,255,0.7)" }}>{value}</span>}
           />
           <Area 
             type="monotone" 

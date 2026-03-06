@@ -102,16 +102,35 @@ fn main() {
 }
 ```
 
-## 4. Frontend Refactoring
+## 4. Frontend Refactoring & UI Specifications
 
-The current frontend simulates the macOS desktop and menubar. We need to strip this away so only the actual widget UI remains.
+**CRITICAL: macOS Simulator Removal**
+This application currently includes a macOS simulator (specifically the `Menubar` component and the desktop background in `App.tsx`) to demonstrate how the app will look and feel on a user's desktop. **This simulator MUST be completely removed** when building the application using Tauri v2. The native macOS menubar will handle the trigger, and the Tauri window will replace the simulated popover container.
 
 ### 1. Remove the Simulated Environment
-- Delete or heavily modify `src/App.tsx`.
-- Remove the `Menubar.tsx` component entirely, as the native macOS menubar will now handle the trigger.
-- Remove the background desktop simulation (`bg-gradient-to-br`, "CLAUDE" text, etc.).
+- Delete the `Menubar.tsx` component entirely.
+- Remove the background desktop simulation (`bg-gradient-to-br`, "CLAUDE" text, etc.) from `App.tsx`.
 
-### 2. Update `App.tsx`
+### 2. UI Preservation & Parent Layer Configuration
+To ensure the UI does not get tampered with and looks exactly like the current high-fidelity React simulation once the backend is built, **Tauri will have to add a parent layer** to render this UI.
+
+**Specifications to follow (STRICT):**
+- **Dimensions:** The Tauri window must be explicitly sized to match the exact dimensions of the `Dashboard` component. The `Dashboard` is currently `w-[400px]` on desktop. The Tauri window should be configured to a fixed width of `400px`. The height must dynamically fit the content or be set to a fixed height that perfectly matches the rendered DOM node (e.g., `max-h-[calc(100vh-50px)]`).
+- **Transparency:** The Tauri window must be configured with `transparent: true` and `decorations: false` in `tauri.conf.json`.
+- **Parent Layer:** The root `App.tsx` must act as a transparent parent layer (`bg-transparent`) that simply centers the `Dashboard` component. Do not add any padding or margins that would offset the dashboard from the Tauri window edges, unless necessary for the drop shadow.
+- **Drop Shadow:** The `Dashboard` uses a `shadow-2xl` class. To ensure this shadow is visible and not clipped by the Tauri window bounds, the Tauri window dimensions might need to be slightly larger than the `Dashboard` itself (e.g., `width: 440, height: 640`), with the `Dashboard` perfectly centered inside the transparent parent layer.
+- **Animations:** Framer Motion animations (`initial`, `animate`, `exit`) must be preserved. Ensure the Tauri window is shown *before* the React component mounts or triggers its entrance animation to prevent visual clipping.
+- **No Minor Modifications:** The UI must be retained without even a single minor modification. All design tokens (colors, typography, spacing) defined in `Design_System.md` must be strictly adhered to.
+
+### 3. Building the Menubar Icon
+The current menubar icon for AI Pulse needs to be converted into a native macOS tray icon.
+- **Design:** The icon should be a monochrome, high-contrast SVG or PNG. Specifically, it must match the current web simulation: an `Activity` (pulse) icon alongside the letters "AP" in a bold font.
+- **Color:** The icon must be pure white (`#FFFFFF`) or configured to adapt to the system theme.
+- **Template Image:** For macOS, the icon file must be named with a `Template` suffix (e.g., `iconTemplate.png` or `iconTemplate@2x.png`) OR configured in `tauri.conf.json` with `"iconAsTemplate": true`. This ensures macOS automatically adapts the icon color for Light and Dark modes.
+- **Dimensions:** Provide the icon in multiple resolutions: `16x16` (1x), `32x32` (2x), and `48x48` (3x) to support Retina displays.
+- **Implementation:** Place these icons in the `src-tauri/icons` directory and reference them in the `systemTray` configuration.
+
+### 4. Update `App.tsx`
 `App.tsx` should now simply render the `Dashboard` component.
 
 ```tsx
@@ -138,12 +157,12 @@ export default function App() {
 }
 ```
 
-### 3. Adjust Component Styling
+### 5. Adjust Component Styling
 - Ensure the `Dashboard` component has rounded corners (`rounded-2xl`), a background color with transparency (`bg-[#000814]/90 backdrop-blur-xl`), and a border, exactly as it currently does.
 - Because the Tauri window will be transparent, the shadow (`shadow-2xl`) applied to the `Dashboard` div will render beautifully against the native macOS desktop.
 - You may need to adjust the `max-h-[calc(100vh-50px)]` in `Dashboard.tsx` to fit perfectly within the fixed Tauri window dimensions.
 
-### 4. Handle the Detailed Report Modal
+### 6. Handle the Detailed Report Modal
 Currently, the `DetailedReport` is a full-screen modal. In a menubar app, you have two choices:
 1. **Expand the current window**: When the user clicks "View Detailed Report", dynamically resize the Tauri window to accommodate the larger UI.
 2. **Open a new window**: Use Tauri's API to spawn a new, standard macOS window for the detailed report.

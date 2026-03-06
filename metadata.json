@@ -1,5 +1,5 @@
 {
-  "name": "Claude Code Usage Dashboard",
-  "description": "A macOS menubar-style application to visualize Claude Code usage costs and trends.",
+  "name": "AI Pulse Usage Dashboard",
+  "description": "A macOS menubar-style application to visualize AI Pulse usage costs and trends.",
   "requestFramePermissions": []
 }

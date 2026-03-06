@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Dashboard } from "./Dashboard";
 import { DetailedReport } from "./DetailedReport";
-import { Command, BatteryCharging, Wifi, Search } from "lucide-react";
+import { Activity, BatteryCharging, Wifi, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Provider } from "@/lib/data";
 
@@ -12,7 +12,7 @@ export function Menubar() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    document.title = "Claude Code Usage Dashboard";
+    document.title = "AI Pulse Usage Dashboard";
   }, []);
 
   // Close when clicking outside
@@ -63,11 +63,11 @@ export function Menubar() {
               whileTap={{ scale: 0.95 }}
               onClick={() => setIsOpen(!isOpen)}
               className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors ${
-                isOpen ? "bg-[#003566] text-[#ffd60a]" : "hover:bg-[#001d3d]"
+                isOpen ? "bg-[#003566] text-white" : "hover:bg-[#001d3d] text-gray-300"
               }`}
             >
-              <Command className="w-3 h-3" />
-              <span className="font-bold text-[#ffd60a]">CC</span>
+              <Activity className="w-3 h-3" />
+              <span className="font-bold text-white">AP</span>
             </motion.button>
 
             {/* Dropdown Dashboard */}
