@@ -32,6 +32,7 @@ When migrating: delete `Menubar.tsx`, strip the desktop bg from `App.tsx` (becom
 
 ## Code Workflows
 
+- Always avoid commiting code to `main` branch. Always create a new branch for each feature, fix, or doc change.
 - Always plan the implementation methods without showcasing any code snippets and seek approval
 - Always follow the Conventional Commits format
 - Always run `npm run lint`, `npm run types`, and `npm run test` before committing
