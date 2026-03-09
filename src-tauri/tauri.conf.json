@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AI Pulse",
+  "version": "0.1.0",
+  "identifier": "com.aipulse.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "AI Pulse",
+        "width": 440,
+        "height": 640,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "resizable": false,
+        "alwaysOnTop": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    }
+  }
+}
