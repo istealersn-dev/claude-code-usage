@@ -15,9 +15,9 @@ fn now_ms() -> u64 {
 /// Runs the Tauri application. Called from main.rs.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Tracks when the window was last shown. Used to debounce the focus-lost
-    // handler — on macOS, clicking the tray icon briefly fires Focused(false)
-    // during the activation transition, which would immediately hide the window.
+    // Timestamp of the last window show(). The focus-lost handler uses this to
+    // ignore the spurious Focused(false) that macOS fires during tray-click
+    // activation before the window fully receives focus.
     let last_shown: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
     let last_shown_event = last_shown.clone();
 
@@ -35,13 +35,21 @@ pub fn run() {
                 .on_tray_icon_event(move |tray, event| {
                     tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
                     if let tauri::tray::TrayIconEvent::Click { .. } = event {
-                        let window = tray.app_handle().get_webview_window("main").unwrap();
-                        let _ = window.move_window(Position::TrayCenter);
+                        let app_handle = tray.app_handle();
+                        let window = app_handle.get_webview_window("main").unwrap();
+                        let _ = window.move_window(Position::TrayBottomCenter);
                         if window.is_visible().unwrap_or(false) {
                             window.hide().unwrap();
                         } else {
-                            last_shown_tray.store(now_ms(), Ordering::Relaxed);
+                            // Record show time before activating so the focus-lost
+                            // debounce window starts from the right moment.
+                            last_shown_tray.store(now_ms(), Ordering::SeqCst);
                             window.show().unwrap();
+                            // On macOS, explicitly activate the app so the window
+                            // actually receives focus. Without this, Accessory-policy
+                            // apps silently fail to become frontmost.
+                            #[cfg(target_os = "macos")]
+                            app_handle.show().unwrap();
                             window.set_focus().unwrap();
                         }
                     }
@@ -51,9 +59,11 @@ pub fn run() {
         })
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::Focused(false) = event {
-                // Ignore spurious focus-lost events within 500ms of showing.
-                // macOS fires Focused(false) briefly during tray-click activation.
-                if now_ms().saturating_sub(last_shown_event.load(Ordering::Relaxed)) > 500 {
+                // Ignore spurious focus-lost events within 500ms of the last show().
+                // macOS fires Focused(false) during the tray-click → app-activate
+                // transition before focus settles on the webview.
+                let elapsed = now_ms().saturating_sub(last_shown_event.load(Ordering::SeqCst));
+                if elapsed > 500 {
                     window.hide().unwrap();
                 }
             }
