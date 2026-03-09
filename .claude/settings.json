@@ -4,29 +4,33 @@
   },
   "permissions": {
     "allow": [
-      "Bash(git *)",
-      "Bash(gh *)",
-      "Bash(npm run *)",
-      "Bash(npm install *)",
-      "Bash(mkdir -p *)"
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(cargo:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)",
+      "WebFetch"
     ],
     "deny": [
-      "Bash(git push --force*)",
-      "Bash(git push -f*)",
-      "Bash(git reset --hard*)",
-      "Bash(git clean *)",
-      "Bash(git branch -D *)",
-      "Bash(git branch -d main)",
-      "Bash(git branch -d main *)",
-      "Bash(rm -rf *)",
-      "Bash(rm -r *)",
-      "Bash(sudo *)",
-      "Bash(chmod *)",
-      "Bash(chown *)",
-      "Bash(curl *)",
-      "Bash(wget *)",
-      "Bash(npx *)",
-      "Bash(node *)"
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(rm -rf /)*"
     ]
   }
 }
