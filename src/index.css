@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+/* Ensure the WebView fills the full Tauri window */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Lower the sm breakpoint to match the 440px Tauri window so
+   sm: variants in Dashboard and other components activate correctly */
+@theme {
+  --breakpoint-sm: 440px;
+}
+
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
     width: 4px;

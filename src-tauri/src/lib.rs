@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{Manager, tray::TrayIconBuilder};
-use tauri_plugin_positioner::{Position, WindowExt};
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -34,10 +33,24 @@ pub fn run() {
                 .icon_as_template(true)
                 .on_tray_icon_event(move |tray, event| {
                     tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
-                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        rect,
+                        ..
+                    } = event {
                         let app_handle = tray.app_handle();
                         let window = app_handle.get_webview_window("main").unwrap();
-                        let _ = window.move_window(Position::TrayBottomCenter);
+                        // Position window directly below the tray icon using the
+                        // icon's physical rect from the click event — avoids reading
+                        // outer_position() which returns stale coords on hidden windows.
+                        let scale = window.scale_factor().unwrap_or(1.0);
+                        let pos = rect.position.to_physical::<i32>(scale);
+                        let size = rect.size.to_physical::<u32>(scale);
+                        let win_w = (440.0 * scale) as i32;
+                        let x = pos.x + (size.width as i32) / 2 - win_w / 2;
+                        let y = pos.y + size.height as i32 + (8.0 * scale) as i32;
+                        let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
                         if window.is_visible().unwrap_or(false) {
                             window.hide().unwrap();
                         } else {

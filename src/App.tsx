@@ -10,7 +10,7 @@ export default function App() {
   const [selectedProvider, setSelectedProvider] = useState<Provider>("claude");
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans overflow-hidden flex justify-center items-start pt-2">
+    <div style={{ width: '100vw', minHeight: '100vh' }} className="bg-transparent text-white font-sans flex justify-center items-start pt-2">
       <Dashboard
         onOpenDetailedReport={(provider) => {
           setSelectedProvider(provider);
