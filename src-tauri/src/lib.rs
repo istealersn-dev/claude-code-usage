@@ -16,8 +16,8 @@ fn now_ms() -> u64 {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Timestamp of the last window show(). The focus-lost handler uses this to
-    // ignore the spurious Focused(false) that macOS fires during tray-click
-    // activation before the window fully receives focus.
+    // ignore the spurious Focused(false) that macOS fires during the tray-click
+    // sequence before focus fully settles on the webview.
     let last_shown: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
     let last_shown_event = last_shown.clone();
 
@@ -41,16 +41,19 @@ pub fn run() {
                         if window.is_visible().unwrap_or(false) {
                             window.hide().unwrap();
                         } else {
-                            // Record show time before activating so the focus-lost
-                            // debounce window starts from the right moment.
+                            // Record show time before revealing the window so the
+                            // 800ms debounce below covers the full macOS focus-settle
+                            // cycle without needing app_handle.show().
                             last_shown_tray.store(now_ms(), Ordering::SeqCst);
-                            window.show().unwrap();
-                            // On macOS, explicitly activate the app so the window
-                            // actually receives focus. Without this, Accessory-policy
-                            // apps silently fail to become frontmost.
-                            #[cfg(target_os = "macos")]
-                            app_handle.show().unwrap();
-                            window.set_focus().unwrap();
+                            // Delay show by 50ms to let the WebView composite its
+                            // first frame before the window becomes visible,
+                            // eliminating the transparent-flash glitch.
+                            let window_clone = window.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                window_clone.show().unwrap();
+                                window_clone.set_focus().unwrap();
+                            });
                         }
                     }
                 })
@@ -59,11 +62,11 @@ pub fn run() {
         })
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::Focused(false) = event {
-                // Ignore spurious focus-lost events within 500ms of the last show().
-                // macOS fires Focused(false) during the tray-click → app-activate
-                // transition before focus settles on the webview.
+                // Ignore focus-lost events within 800ms of the last show().
+                // Removed app_handle.show() which was causing a secondary
+                // Focused(false) after the debounce window expired.
                 let elapsed = now_ms().saturating_sub(last_shown_event.load(Ordering::SeqCst));
-                if elapsed > 500 {
+                if elapsed > 800 {
                     window.hide().unwrap();
                 }
             }
