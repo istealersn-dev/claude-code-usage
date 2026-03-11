@@ -8,6 +8,7 @@ body,
   padding: 0;
   width: 100%;
   height: 100%;
+  background-color: rgba(0, 0, 0, 0) !important;
 }
 
 /* Lower the sm breakpoint to match the 440px Tauri window so

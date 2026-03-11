@@ -26,7 +26,8 @@
         "transparent": true,
         "visible": false,
         "resizable": false,
-        "alwaysOnTop": false
+        "alwaysOnTop": false,
+        "shadow": false
       }
     ]
   }

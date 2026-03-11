@@ -21,10 +21,32 @@ pub fn run() {
     let last_shown_event = last_shown.clone();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_positioner::init())
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Force the WKWebView and NSWindow to be fully transparent.
+            // Despite transparent:true in config, the macOS window background
+            // can still render a dark rounded rectangle behind the WebView.
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.with_webview(|wv| unsafe {
+                    use objc2::runtime::AnyObject;
+                    use objc2::msg_send;
+
+                    let wkwebview = wv.inner() as *mut AnyObject;
+                    let ns_window = wv.ns_window() as *mut AnyObject;
+
+                    // WKWebView: setOpaque(false) + setBackgroundColor(nil)
+                    let _: () = msg_send![wkwebview, setOpaque: false];
+                    let _: () = msg_send![wkwebview, setBackgroundColor: std::ptr::null::<AnyObject>()];
+
+                    // NSWindow: setBackgroundColor([NSColor clearColor])
+                    let ns_color_cls = objc2::runtime::AnyClass::get(c"NSColor").unwrap();
+                    let clear: *mut AnyObject = msg_send![ns_color_cls, clearColor];
+                    let _: () = msg_send![ns_window, setBackgroundColor: clear];
+                });
+            }
 
             let last_shown_tray = last_shown.clone();
 
@@ -32,7 +54,6 @@ pub fn run() {
                 .icon(app.default_window_icon().unwrap().clone())
                 .icon_as_template(true)
                 .on_tray_icon_event(move |tray, event| {
-                    tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
                     if let tauri::tray::TrayIconEvent::Click {
                         button: tauri::tray::MouseButton::Left,
                         button_state: tauri::tray::MouseButtonState::Up,
