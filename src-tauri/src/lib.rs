@@ -1,23 +1,23 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use tauri::{Manager, tray::TrayIconBuilder};
 
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
+/// Width of the menubar popup window in logical pixels — must match `tauri.conf.json`.
+const WIN_WIDTH_PX: f64 = 440.0;
+
+/// How long after show() to ignore focus-lost events (ms).
+/// macOS fires a spurious Focused(false) during the tray-click sequence
+/// before focus fully settles on the webview.
+const FOCUS_SETTLE_MS: u128 = 800;
 
 /// Runs the Tauri application. Called from main.rs.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Timestamp of the last window show(). The focus-lost handler uses this to
-    // ignore the spurious Focused(false) that macOS fires during the tray-click
-    // sequence before focus fully settles on the webview.
-    let last_shown: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
+    // Monotonic timestamp of the last window show(). Used by the focus-lost
+    // handler to suppress the spurious Focused(false) macOS fires during the
+    // tray-click sequence before focus fully settles on the webview.
+    let last_shown: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
     let last_shown_event = last_shown.clone();
 
     tauri::Builder::default()
@@ -26,8 +26,8 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // Force the WKWebView and NSWindow to be fully transparent.
-            // Despite transparent:true in config, the macOS window background
-            // can still render a dark rounded rectangle behind the WebView.
+            // Despite transparent:true in config, macOS can still render a dark
+            // rounded rectangle behind the WebView.
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.with_webview(|wv| unsafe {
@@ -37,21 +37,24 @@ pub fn run() {
                     let wkwebview = wv.inner() as *mut AnyObject;
                     let ns_window = wv.ns_window() as *mut AnyObject;
 
-                    // WKWebView: setOpaque(false) + setBackgroundColor(nil)
                     let _: () = msg_send![wkwebview, setOpaque: false];
                     let _: () = msg_send![wkwebview, setBackgroundColor: std::ptr::null::<AnyObject>()];
 
-                    // NSWindow: setBackgroundColor([NSColor clearColor])
-                    let ns_color_cls = objc2::runtime::AnyClass::get(c"NSColor").unwrap();
-                    let clear: *mut AnyObject = msg_send![ns_color_cls, clearColor];
-                    let _: () = msg_send![ns_window, setBackgroundColor: clear];
+                    if let Some(ns_color_cls) = objc2::runtime::AnyClass::get(c"NSColor") {
+                        let clear: *mut AnyObject = msg_send![ns_color_cls, clearColor];
+                        let _: () = msg_send![ns_window, setBackgroundColor: clear];
+                    }
                 });
             }
 
-            let last_shown_tray = last_shown.clone();
+            let icon = app
+                .default_window_icon()
+                .ok_or("default window icon not found")?
+                .clone();
 
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+            let last_shown_tray = last_shown.clone();
+            let tray = TrayIconBuilder::new()
+                .icon(icon)
                 .icon_as_template(true)
                 .on_tray_icon_event(move |tray, event| {
                     if let tauri::tray::TrayIconEvent::Click {
@@ -61,47 +64,53 @@ pub fn run() {
                         ..
                     } = event {
                         let app_handle = tray.app_handle();
-                        let window = app_handle.get_webview_window("main").unwrap();
+                        let Some(window) = app_handle.get_webview_window("main") else { return };
+
                         // Position window directly below the tray icon using the
                         // icon's physical rect from the click event — avoids reading
                         // outer_position() which returns stale coords on hidden windows.
                         let scale = window.scale_factor().unwrap_or(1.0);
                         let pos = rect.position.to_physical::<i32>(scale);
                         let size = rect.size.to_physical::<u32>(scale);
-                        let win_w = (440.0 * scale) as i32;
+                        let win_w = (WIN_WIDTH_PX * scale) as i32;
                         let x = pos.x + (size.width as i32) / 2 - win_w / 2;
                         let y = pos.y + size.height as i32 + (8.0 * scale) as i32;
                         let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+
                         if window.is_visible().unwrap_or(false) {
-                            window.hide().unwrap();
+                            let _ = window.hide();
                         } else {
                             // Record show time before revealing the window so the
-                            // 800ms debounce below covers the full macOS focus-settle
-                            // cycle without needing app_handle.show().
-                            last_shown_tray.store(now_ms(), Ordering::SeqCst);
+                            // debounce below covers the full macOS focus-settle cycle.
+                            if let Ok(mut guard) = last_shown_tray.lock() {
+                                *guard = Some(Instant::now());
+                            }
                             // Delay show by 50ms to let the WebView composite its
                             // first frame before the window becomes visible,
                             // eliminating the transparent-flash glitch.
                             let window_clone = window.clone();
-                            std::thread::spawn(move || {
-                                std::thread::sleep(std::time::Duration::from_millis(50));
-                                window_clone.show().unwrap();
-                                window_clone.set_focus().unwrap();
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(Duration::from_millis(50)).await;
+                                let _ = window_clone.show();
+                                let _ = window_clone.set_focus();
                             });
                         }
                     }
                 })
                 .build(app)?;
+
+            app.manage(tray);
             Ok(())
         })
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::Focused(false) = event {
-                // Ignore focus-lost events within 800ms of the last show().
-                // Removed app_handle.show() which was causing a secondary
-                // Focused(false) after the debounce window expired.
-                let elapsed = now_ms().saturating_sub(last_shown_event.load(Ordering::SeqCst));
-                if elapsed > 800 {
-                    window.hide().unwrap();
+                let elapsed_ms = last_shown_event
+                    .lock()
+                    .ok()
+                    .and_then(|guard| guard.as_ref().map(|t| t.elapsed().as_millis()))
+                    .unwrap_or(u128::MAX);
+                if elapsed_ms > FOCUS_SETTLE_MS {
+                    let _ = window.hide();
                 }
             }
         })

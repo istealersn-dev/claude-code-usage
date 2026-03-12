@@ -11,11 +11,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["dmg", "app"],
     "icon": ["icons/icon.png"]
   },
   "app": {
     "macOSPrivateApi": true,
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+    },
     "windows": [
       {
         "label": "main",
@@ -26,7 +29,6 @@
         "transparent": true,
         "visible": false,
         "resizable": false,
-        "alwaysOnTop": false,
         "shadow": false
       }
     ]
