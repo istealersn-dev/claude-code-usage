@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use tauri::{Manager, tray::TrayIconBuilder};
@@ -19,6 +20,11 @@ pub fn run() {
     // tray-click sequence before focus fully settles on the webview.
     let last_shown: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
     let last_shown_event = last_shown.clone();
+
+    // Guards the 50 ms show-delay window. is_visible() returns false during
+    // those 50 ms, so without this flag a second click would spawn a second
+    // show() task instead of hiding the window as the user expects.
+    let pending_show: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 
     tauri::Builder::default()
         .setup(move |app| {
@@ -55,6 +61,7 @@ pub fn run() {
                 .clone();
 
             let last_shown_tray = last_shown.clone();
+            let pending_show_tray = pending_show.clone();
             let tray = TrayIconBuilder::new()
                 .icon(icon)
                 .icon_as_template(true)
@@ -87,9 +94,16 @@ pub fn run() {
                         let y = pos.y + size.height as i32 + (8.0 * scale) as i32;
                         let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 
-                        if window.is_visible().unwrap_or(false) {
+                        if window.is_visible().unwrap_or(false)
+                            || pending_show_tray.load(Ordering::Acquire)
+                        {
+                            // Hide immediately; if a show task is in-flight, clear
+                            // the flag so the task's show() still fires but the
+                            // window is hidden again by the focus-lost handler.
+                            pending_show_tray.store(false, Ordering::Release);
                             let _ = window.hide();
                         } else {
+                            pending_show_tray.store(true, Ordering::Release);
                             // Record show time before revealing the window so the
                             // debounce below covers the full macOS focus-settle cycle.
                             if let Ok(mut guard) = last_shown_tray.lock() {
@@ -99,8 +113,10 @@ pub fn run() {
                             // first frame before the window becomes visible,
                             // eliminating the transparent-flash glitch.
                             let window_clone = window.clone();
+                            let pending_show_task = pending_show_tray.clone();
                             tauri::async_runtime::spawn(async move {
                                 tokio::time::sleep(Duration::from_millis(50)).await;
+                                pending_show_task.store(false, Ordering::Release);
                                 let _ = window_clone.show();
                                 let _ = window_clone.set_focus();
                             });
