@@ -29,6 +29,7 @@
         "transparent": true,
         "visible": false,
         "resizable": false,
+        "alwaysOnTop": true,
         "shadow": false
       }
     ]

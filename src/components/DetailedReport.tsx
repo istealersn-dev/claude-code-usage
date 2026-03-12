@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { X, Download, FileText, BarChart2, PieChart, Activity, Wrench, Puzzle, Layers, Code2 } from "lucide-react";
+import { X, Download, FileText, BarChart2, Activity, Wrench, Puzzle, Layers, Code2 } from "lucide-react";
 import { UsageChart } from "./UsageChart";
 import { PROVIDERS, Provider } from "@/lib/data";
 

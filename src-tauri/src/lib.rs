@@ -38,10 +38,12 @@ pub fn run() {
                     let ns_window = wv.ns_window() as *mut AnyObject;
 
                     let _: () = msg_send![wkwebview, setOpaque: false];
-                    let _: () = msg_send![wkwebview, setBackgroundColor: std::ptr::null::<AnyObject>()];
 
+                    // Use [NSColor clearColor] for both WKWebView and NSWindow so
+                    // neither layer renders an opaque background.
                     if let Some(ns_color_cls) = objc2::runtime::AnyClass::get(c"NSColor") {
                         let clear: *mut AnyObject = msg_send![ns_color_cls, clearColor];
+                        let _: () = msg_send![wkwebview, setBackgroundColor: clear];
                         let _: () = msg_send![ns_window, setBackgroundColor: clear];
                     }
                 });
@@ -73,7 +75,15 @@ pub fn run() {
                         let pos = rect.position.to_physical::<i32>(scale);
                         let size = rect.size.to_physical::<u32>(scale);
                         let win_w = (WIN_WIDTH_PX * scale) as i32;
-                        let x = pos.x + (size.width as i32) / 2 - win_w / 2;
+                        let screen_w = window
+                            .current_monitor()
+                            .ok()
+                            .flatten()
+                            .map(|m| m.size().width as i32)
+                            .unwrap_or(i32::MAX);
+                        let x = (pos.x + (size.width as i32) / 2 - win_w / 2)
+                            .max(0)
+                            .min(screen_w - win_w);
                         let y = pos.y + size.height as i32 + (8.0 * scale) as i32;
                         let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 
