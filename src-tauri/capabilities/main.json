@@ -2,8 +2,9 @@
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "main-capability",
   "description": "Main window capabilities",
-  "windows": ["main"],
+  "windows": ["main", "detailed-report"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:webview:allow-create-webview-window"
   ]
 }

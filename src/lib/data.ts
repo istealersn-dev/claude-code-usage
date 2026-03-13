@@ -262,11 +262,3 @@ export const PROVIDERS: Record<Provider, ProviderData> = {
   codex: codexData,
   gemini: geminiData
 };
-
-// For backwards compatibility during transition
-export const MOCK_USAGE_DATA = claudeData.usageData;
-export const PROJECT_USAGE = claudeData.projectUsage;
-export const MODEL_USAGE = claudeData.modelUsage;
-export const TOTAL_CONTEXT_LIMIT = claudeData.contextLimit;
-export const CURRENT_CONTEXT_USAGE = claudeData.currentUsage;
-export const DETAILED_ANALYTICS = claudeData.detailedAnalytics;

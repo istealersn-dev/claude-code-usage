@@ -1,16 +1,23 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { PROVIDERS, Provider } from "@/lib/data";
+import { fetchClaudeStats } from "@/lib/claudeUsage";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface DashboardProps {
-  onOpenDetailedReport?: (provider: Provider) => void;
-}
+const PROVIDER_ICONS: Record<Provider, React.ElementType> = {
+  claude: Zap,
+  codex: Code2,
+  gemini: Sparkles,
+};
 
-export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
+const mockRefresh = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, 1500));
+
+export function Dashboard() {
   const [provider, setProvider] = useState<Provider>("claude");
   const [viewMode, setViewMode] = useState<"projects" | "models">("projects");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -18,47 +25,70 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
   const [error, setError] = useState<string | null>(null);
   
   const providerData = PROVIDERS[provider];
-  
-  // State for data to simulate updates
+
+  // State for data — real for Claude, mock for other providers
   const [contextUsage, setContextUsage] = useState(providerData.currentUsage);
   const [usageData, setUsageData] = useState(providerData.usageData);
+  const [realModelUsage, setRealModelUsage] = useState<typeof providerData.modelUsage | null>(null);
 
+  const loadClaudeStats = useCallback(() => {
+    return fetchClaudeStats()
+      .then((result) => {
+        if (result.usageData.length > 0) setUsageData(result.usageData);
+        if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+      });
+  }, []);
+
+  // Fetch real Claude stats on mount and whenever the user switches to Claude
+  useEffect(() => {
+    if (provider !== "claude") {
+      setRealModelUsage(null);
+      return;
+    }
+    loadClaudeStats()
+      .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
+  }, [provider, loadClaudeStats]);
 
   const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
   const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
+  const displayModelUsage = realModelUsage ?? providerData.modelUsage;
 
-  const ProviderIcon = provider === 'claude' ? Zap : provider === 'codex' ? Code2 : Sparkles;
+  const ProviderIcon = PROVIDER_ICONS[provider];
 
   const handleRefresh = () => {
     if (isRefreshing) return;
-    
+
     setIsRefreshing(true);
     setError(null);
-    
-    // Simulate network request
-    setTimeout(() => {
-      // Simulate 20% chance of failure
-      if (Math.random() < 0.2) {
-        setError("Update failed");
+
+    if (provider === "claude") {
+      // Re-fetch real data from the local stats file
+      loadClaudeStats()
+        .then(() => {
+          setRefreshKey((k) => k + 1);
+          setIsRefreshing(false);
+        })
+        .catch(() => {
+          setError("Update failed");
+          setIsRefreshing(false);
+        });
+    } else {
+      // Mock refresh for non-Claude providers
+      mockRefresh().then(() => {
+        const randomFactor = 0.95 + Math.random() * 0.1;
+        setContextUsage(
+          Math.min(providerData.contextLimit, Math.max(0, providerData.currentUsage * randomFactor))
+        );
+        const newData = [...providerData.usageData];
+        const lastDay = { ...newData[newData.length - 1] };
+        lastDay.inputTokens = Math.floor(lastDay.inputTokens * (0.9 + Math.random() * 0.2));
+        lastDay.outputTokens = Math.floor(lastDay.outputTokens * (0.9 + Math.random() * 0.2));
+        newData[newData.length - 1] = lastDay;
+        setUsageData(newData);
+        setRefreshKey((prev) => prev + 1);
         setIsRefreshing(false);
-        return;
-      }
-
-      // Randomize context usage slightly (+/- 5%)
-      const randomFactor = 0.95 + Math.random() * 0.1;
-      setContextUsage(Math.min(providerData.contextLimit, Math.max(0, providerData.currentUsage * randomFactor)));
-      
-      // Randomize last day of usage data
-      const newData = [...providerData.usageData];
-      const lastDay = { ...newData[newData.length - 1] };
-      lastDay.inputTokens = Math.floor(lastDay.inputTokens * (0.9 + Math.random() * 0.2));
-      lastDay.outputTokens = Math.floor(lastDay.outputTokens * (0.9 + Math.random() * 0.2));
-      newData[newData.length - 1] = lastDay;
-      setUsageData(newData);
-
-      setRefreshKey(prev => prev + 1);
-      setIsRefreshing(false);
-    }, 1500);
+      });
+    }
   };
 
   return (
@@ -132,7 +162,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
           {/* Top Section: Liquid Gauge & Key Stats */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1 flex flex-col items-center">
-               <div key={`gauge-wrapper-${refreshKey}-${provider}`}>
+               <div key={`gauge-wrapper-${provider}`}>
                   <LiquidGauge percentage={contextPercentage} isError={!!error} color={providerData.themeColor} darkColor={providerData.themeDark} />
                </div>
                <div className="mt-2 text-center">
@@ -150,7 +180,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                    <span className="text-[10px] uppercase font-bold">Trend</span>
                  </div>
                  <p className="text-[10px] sm:text-xs text-gray-300 leading-tight">
-                   Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>12%</span> from last week.
+                   Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>—</span> from last week.
                  </p>
                </div>
                
@@ -160,7 +190,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                    <span className="text-[10px] uppercase font-bold">Projected</span>
                  </div>
                  <p className="text-[10px] sm:text-xs text-gray-300 leading-tight">
-                   Est. <span className="text-white font-mono">$12.50</span> by month end.
+                   Est. <span className="text-white font-mono">—</span> by month end.
                  </p>
                </div>
             </div>
@@ -171,7 +201,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
               <TrendingUp className="w-3 h-3" /> 7-Day Token Trend
             </h3>
-            <div key={`chart-wrapper-${refreshKey}-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
+            <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
               <UsageChart data={usageData} color={providerData.themeColor} />
             </div>
           </div>
@@ -248,7 +278,7 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
                     transition={{ duration: 0.2 }}
                     className="space-y-1 sm:space-y-2"
                   >
-                    {providerData.modelUsage.map((model) => (
+                    {displayModelUsage.map((model) => (
                       <div key={model.name} className="flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
                         <div className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
@@ -270,9 +300,18 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
         
         {/* Footer */}
         <div className="shrink-0 bg-[#000814] p-3 border-t border-[#003566] text-center">
-          <button 
-            onClick={() => onOpenDetailedReport?.(provider)}
-            className="text-[10px] text-[#003566] transition-colors uppercase tracking-widest font-bold"
+          <button
+            onClick={() => {
+              new WebviewWindow("detailed-report", {
+                url: `/?window=report&provider=${provider}`,
+                title: "Detailed Usage Report",
+                width: 1000,
+                height: 800,
+                decorations: true,
+                resizable: true,
+              });
+            }}
+            className="text-[10px] transition-colors uppercase tracking-widest font-bold"
             style={{ color: providerData.themeColor }}
           >
             View Detailed Report
