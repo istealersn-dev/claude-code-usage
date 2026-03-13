@@ -1,3 +1,4 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Dashboard } from "@/components/Dashboard";
 import { DetailedReport } from "@/components/DetailedReport";
 import type { Provider } from "@/lib/data";
@@ -21,7 +22,7 @@ export default function App() {
     return (
       <DetailedReport
         provider={reportProvider}
-        onClose={() => window.close()}
+        onClose={() => { getCurrentWindow().close(); }}
       />
     );
   }
