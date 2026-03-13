@@ -40,7 +40,6 @@ export async function fetchClaudeStats(): Promise<ClaudeUsageResult> {
     inputTokens: d.input_tokens,
     outputTokens: d.output_tokens,
     cacheTokens: d.cache_tokens,
-    cost: 0,
   }));
 
   let totalTokens = 0;

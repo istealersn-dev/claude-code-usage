@@ -8,7 +8,7 @@ export interface UsageData {
   inputTokens: number;
   outputTokens: number;
   cacheTokens: number;
-  cost: number;
+  cost?: number;
 }
 
 export interface ProjectUsage {

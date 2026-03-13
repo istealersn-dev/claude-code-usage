@@ -101,9 +101,10 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
     );
     let cum_total = cum_input + cum_output + cum_cache;
 
-    // Build daily usage entries — keep the last 30 days.
-    let mut entries: Vec<DailyUsage> = cache
-        .daily_model_tokens
+    // Build daily usage entries — sort by ISO date then keep the last 30 days.
+    let mut daily = cache.daily_model_tokens;
+    daily.sort_by(|a, b| a.date.cmp(&b.date));
+    let mut entries: Vec<DailyUsage> = daily
         .iter()
         .map(|day| {
             let total: u64 = day.tokens_by_model.values().sum();
