@@ -46,10 +46,13 @@ pub fn run() {
                     let _: () = msg_send![wkwebview, setOpaque: false];
 
                     // Use [NSColor clearColor] for both WKWebView and NSWindow so
-                    // neither layer renders an opaque background.
+                    // neither layer renders an opaque background. setOpaque:false
+                    // on NSWindow tells the compositor the window has transparent
+                    // pixels; setBackgroundColor:clearColor removes the default fill.
                     if let Some(ns_color_cls) = objc2::runtime::AnyClass::get(c"NSColor") {
                         let clear: *mut AnyObject = msg_send![ns_color_cls, clearColor];
                         let _: () = msg_send![wkwebview, setBackgroundColor: clear];
+                        let _: () = msg_send![ns_window, setOpaque: false];
                         let _: () = msg_send![ns_window, setBackgroundColor: clear];
                     }
                 });
@@ -97,9 +100,9 @@ pub fn run() {
                         if window.is_visible().unwrap_or(false)
                             || pending_show_tray.load(Ordering::Acquire)
                         {
-                            // Hide immediately; if a show task is in-flight, clear
-                            // the flag so the task's show() still fires but the
-                            // window is hidden again by the focus-lost handler.
+                            // Atomically cancel any in-flight show task by clearing
+                            // the flag. The task checks the flag via swap() before
+                            // calling show(), so it will no-op if we got here first.
                             pending_show_tray.store(false, Ordering::Release);
                             let _ = window.hide();
                         } else {
@@ -116,9 +119,12 @@ pub fn run() {
                             let pending_show_task = pending_show_tray.clone();
                             tauri::async_runtime::spawn(async move {
                                 tokio::time::sleep(Duration::from_millis(50)).await;
-                                pending_show_task.store(false, Ordering::Release);
-                                let _ = window_clone.show();
-                                let _ = window_clone.set_focus();
+                                // swap() atomically reads-and-clears the flag.
+                                // If it was already cleared by a hide click, skip show().
+                                if pending_show_task.swap(false, Ordering::AcqRel) {
+                                    let _ = window_clone.show();
+                                    let _ = window_clone.set_focus();
+                                }
                             });
                         }
                     }
