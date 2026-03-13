@@ -74,20 +74,25 @@ export function Dashboard() {
         });
     } else {
       // Mock refresh for non-Claude providers
-      mockRefresh().then(() => {
-        const randomFactor = 0.95 + Math.random() * 0.1;
-        setContextUsage(
-          Math.min(providerData.contextLimit, Math.max(0, providerData.currentUsage * randomFactor))
-        );
-        const newData = [...providerData.usageData];
-        const lastDay = { ...newData[newData.length - 1] };
-        lastDay.inputTokens = Math.floor(lastDay.inputTokens * (0.9 + Math.random() * 0.2));
-        lastDay.outputTokens = Math.floor(lastDay.outputTokens * (0.9 + Math.random() * 0.2));
-        newData[newData.length - 1] = lastDay;
-        setUsageData(newData);
-        setRefreshKey((prev) => prev + 1);
-        setIsRefreshing(false);
-      });
+      mockRefresh()
+        .then(() => {
+          const randomFactor = 0.95 + Math.random() * 0.1;
+          setContextUsage(
+            Math.min(providerData.contextLimit, Math.max(0, providerData.currentUsage * randomFactor))
+          );
+          const newData = [...providerData.usageData];
+          const lastDay = { ...newData[newData.length - 1] };
+          lastDay.inputTokens = Math.floor(lastDay.inputTokens * (0.9 + Math.random() * 0.2));
+          lastDay.outputTokens = Math.floor(lastDay.outputTokens * (0.9 + Math.random() * 0.2));
+          newData[newData.length - 1] = lastDay;
+          setUsageData(newData);
+          setRefreshKey((prev) => prev + 1);
+          setIsRefreshing(false);
+        })
+        .catch(() => {
+          setError("Update failed");
+          setIsRefreshing(false);
+        });
     }
   };
 
@@ -301,7 +306,12 @@ export function Dashboard() {
         {/* Footer */}
         <div className="shrink-0 bg-[#000814] p-3 border-t border-[#003566] text-center">
           <button
-            onClick={() => {
+            onClick={async () => {
+              const existing = await WebviewWindow.getByLabel("detailed-report");
+              if (existing) {
+                await existing.setFocus();
+                return;
+              }
               new WebviewWindow("detailed-report", {
                 url: `/?window=report&provider=${provider}`,
                 title: "Detailed Usage Report",

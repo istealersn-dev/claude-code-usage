@@ -108,11 +108,10 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
         .map(|day| {
             let total: u64 = day.tokens_by_model.values().sum();
             let (inp, out, cac) = if cum_total > 0 {
-                (
-                    total * cum_input / cum_total,
-                    total * cum_output / cum_total,
-                    total * cum_cache / cum_total,
-                )
+                let inp = total * cum_input / cum_total;
+                let out = total * cum_output / cum_total;
+                let cac = total - inp - out;
+                (inp, out, cac)
             } else {
                 (total, 0, 0)
             };

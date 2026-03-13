@@ -14,12 +14,14 @@ interface DetailedReportProps {
 export function DetailedReport({ provider, onClose }: DetailedReportProps) {
   const providerData = PROVIDERS[provider];
   const [liveUsageData, setLiveUsageData] = useState<UsageData[]>(providerData.usageData);
+  const [liveTotalSessions, setLiveTotalSessions] = useState<number | null>(null);
 
   useEffect(() => {
     if (provider !== "claude") return;
     fetchClaudeStats()
       .then((result) => {
         if (result.usageData.length > 0) setLiveUsageData(result.usageData);
+        if (result.totalSessions > 0) setLiveTotalSessions(result.totalSessions);
       })
       .catch(() => {
         // fall back to mock silently
@@ -81,7 +83,9 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
               <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Total Sessions</p>
               <p className="text-2xl font-mono text-white">
-                {providerData.detailedAnalytics.reduce((acc, curr) => acc + curr.sessions, 0)}
+                {liveTotalSessions !== null
+                  ? liveTotalSessions
+                  : providerData.detailedAnalytics.reduce((acc, curr) => acc + curr.sessions, 0)}
               </p>
               <p className="text-[10px] text-emerald-400 mt-1">—</p>
             </div>
