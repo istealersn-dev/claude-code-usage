@@ -78,25 +78,6 @@ pub fn run() {
                         let app_handle = tray.app_handle();
                         let Some(window) = app_handle.get_webview_window("main") else { return };
 
-                        // Position window directly below the tray icon using the
-                        // icon's physical rect from the click event — avoids reading
-                        // outer_position() which returns stale coords on hidden windows.
-                        let scale = window.scale_factor().unwrap_or(1.0);
-                        let pos = rect.position.to_physical::<i32>(scale);
-                        let size = rect.size.to_physical::<u32>(scale);
-                        let win_w = (WIN_WIDTH_PX * scale) as i32;
-                        let screen_w = window
-                            .current_monitor()
-                            .ok()
-                            .flatten()
-                            .map(|m| m.size().width as i32)
-                            .unwrap_or(i32::MAX);
-                        let x = (pos.x + (size.width as i32) / 2 - win_w / 2)
-                            .max(0)
-                            .min(screen_w - win_w);
-                        let y = pos.y + size.height as i32 + (8.0 * scale) as i32;
-                        let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
-
                         if window.is_visible().unwrap_or(false)
                             || pending_show_tray.load(Ordering::Acquire)
                         {
@@ -106,6 +87,24 @@ pub fn run() {
                             pending_show_tray.store(false, Ordering::Release);
                             let _ = window.hide();
                         } else {
+                            // Position window directly below the tray icon only when
+                            // showing — avoids a visual snap on hide and skips the
+                            // current_monitor() call on every hide click.
+                            let scale = window.scale_factor().unwrap_or(1.0);
+                            let pos = rect.position.to_physical::<i32>(scale);
+                            let size = rect.size.to_physical::<u32>(scale);
+                            let win_w = (WIN_WIDTH_PX * scale) as i32;
+                            let screen_w = window
+                                .current_monitor()
+                                .ok()
+                                .flatten()
+                                .map(|m| m.size().width as i32)
+                                .unwrap_or(i32::MAX);
+                            let x = (pos.x + (size.width as i32) / 2 - win_w / 2)
+                                .max(0)
+                                .min(screen_w - win_w);
+                            let y = pos.y + size.height as i32 + (8.0 * scale) as i32;
+                            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
                             pending_show_tray.store(true, Ordering::Release);
                             // Record show time before revealing the window so the
                             // debounce below covers the full macOS focus-settle cycle.
