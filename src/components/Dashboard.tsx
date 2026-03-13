@@ -43,11 +43,16 @@ export function Dashboard() {
   useEffect(() => {
     if (provider !== "claude") {
       setRealModelUsage(null);
+      setUsageData(providerData.usageData);
+      setContextUsage(providerData.currentUsage);
       return;
     }
+    // reset to mock before IPC resolves to avoid showing stale data
+    setUsageData(providerData.usageData);
+    setContextUsage(providerData.currentUsage);
     loadClaudeStats()
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
-  }, [provider, loadClaudeStats]);
+  }, [provider, loadClaudeStats, providerData]);
 
   const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
   const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "report-capability",
+  "description": "Capability for the detailed report window.",
+  "windows": ["detailed-report"],
+  "permissions": [
+    "core:default"
+  ]
+}
