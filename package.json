@@ -10,7 +10,7 @@
     "clean": "rm -rf dist",
     "lint": "eslint src",
     "types": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "tauri": "tauri"
   },
   "dependencies": {
