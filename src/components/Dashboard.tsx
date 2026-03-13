@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
-import { DetailedReport } from "./DetailedReport";
 import { PROVIDERS, Provider } from "@/lib/data";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,11 +23,6 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
   const [contextUsage, setContextUsage] = useState(providerData.currentUsage);
   const [usageData, setUsageData] = useState(providerData.usageData);
 
-  // Update state when provider changes
-  useEffect(() => {
-    setContextUsage(providerData.currentUsage);
-    setUsageData(providerData.usageData);
-  }, [provider, providerData]);
 
   const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
   const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
@@ -83,7 +77,12 @@ export function Dashboard({ onOpenDetailedReport }: DashboardProps) {
               <ProviderIcon className="w-4 h-4" style={{ color: providerData.themeColor }} />
               <select
                 value={provider}
-                onChange={(e) => setProvider(e.target.value as Provider)}
+                onChange={(e) => {
+                  const next = e.target.value as Provider;
+                  setProvider(next);
+                  setContextUsage(PROVIDERS[next].currentUsage);
+                  setUsageData(PROVIDERS[next].usageData);
+                }}
                 className="bg-transparent text-xs sm:text-sm font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none"
                 style={{ color: providerData.themeColor }}
               >

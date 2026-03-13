@@ -1,21 +1,32 @@
-import { Menubar } from "./components/Menubar";
+import { Dashboard } from "@/components/Dashboard";
+import { DetailedReport } from "@/components/DetailedReport";
+import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
+import { DEFAULT_PROVIDER } from "@/lib/data";
+import type { Provider } from "@/lib/data";
 
+/** Root application wrapper — transparent container for the Tauri menubar window. */
 export default function App() {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-[#000814] via-[#001d3d] to-[#003566] text-white font-sans overflow-hidden relative">
-      <Menubar />
-      
-      {/* Desktop Simulation Content */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 select-none">
-        <h1 className="text-9xl font-black tracking-tighter text-[#003566] mix-blend-overlay">
-          AI PULSE
-        </h1>
-      </div>
+  const [showDetailedReport, setShowDetailedReport] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<Provider>(DEFAULT_PROVIDER);
 
-      <div className="absolute bottom-10 left-10 text-xs text-gray-500 font-mono">
-        <p>macOS Simulation Environment</p>
-        <p>AI Pulse Usage Dashboard Preview</p>
-      </div>
+  return (
+    <div className="w-screen min-h-screen bg-transparent text-white font-sans flex justify-center items-start pt-2">
+      <Dashboard
+        onOpenDetailedReport={(provider) => {
+          setSelectedProvider(provider);
+          setShowDetailedReport(true);
+        }}
+      />
+      <AnimatePresence>
+        {showDetailedReport && (
+          <DetailedReport
+            key="detailed-report"
+            provider={selectedProvider}
+            onClose={() => setShowDetailedReport(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

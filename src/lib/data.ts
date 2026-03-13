@@ -1,5 +1,8 @@
 export type Provider = 'claude' | 'codex' | 'gemini';
 
+/** The provider selected by default on first launch. */
+export const DEFAULT_PROVIDER: Provider = 'claude';
+
 export interface UsageData {
   date: string;
   inputTokens: number;
