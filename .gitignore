@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 .claude/
+_code-review/
+src-tauri/gen/schemas/

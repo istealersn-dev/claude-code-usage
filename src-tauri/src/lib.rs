@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -11,6 +12,167 @@ const WIN_WIDTH_PX: f64 = 440.0;
 /// macOS fires a spurious Focused(false) during the tray-click sequence
 /// before focus fully settles on the webview.
 const FOCUS_SETTLE_MS: u128 = 800;
+
+// ── Stats-cache data types ────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+struct StatsCache {
+    #[serde(rename = "dailyModelTokens", default)]
+    daily_model_tokens: Vec<DailyModelTokens>,
+    #[serde(rename = "modelUsage", default)]
+    model_usage: HashMap<String, ModelUsageEntry>,
+    #[serde(rename = "totalSessions", default)]
+    total_sessions: u64,
+}
+
+#[derive(serde::Deserialize)]
+struct DailyModelTokens {
+    date: String,
+    #[serde(rename = "tokensByModel", default)]
+    tokens_by_model: HashMap<String, u64>,
+}
+
+#[derive(serde::Deserialize)]
+struct ModelUsageEntry {
+    #[serde(rename = "inputTokens", default)]
+    input_tokens: u64,
+    #[serde(rename = "outputTokens", default)]
+    output_tokens: u64,
+    #[serde(rename = "cacheReadInputTokens", default)]
+    cache_read_tokens: u64,
+    #[serde(rename = "cacheCreationInputTokens", default)]
+    cache_creation_tokens: u64,
+}
+
+// ── IPC return types ──────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct DailyUsage {
+    date: String,
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_tokens: u64,
+}
+
+#[derive(serde::Serialize)]
+pub struct ModelStat {
+    name: String,
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_tokens: u64,
+}
+
+#[derive(serde::Serialize)]
+pub struct ClaudeStats {
+    daily_usage: Vec<DailyUsage>,
+    model_stats: Vec<ModelStat>,
+    total_sessions: u64,
+}
+
+// ── IPC command ───────────────────────────────────────────────────────────────
+
+/// Reads ~/.claude/stats-cache.json and returns structured usage data.
+/// Returns Err if the file is missing or cannot be parsed — the frontend
+/// falls back to mock data on error.
+#[tauri::command]
+fn get_claude_stats() -> Result<ClaudeStats, String> {
+    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+    let path = std::path::Path::new(&home)
+        .join(".claude")
+        .join("stats-cache.json");
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("stats-cache.json: {}", e))?;
+
+    let cache: StatsCache =
+        serde_json::from_str(&content).map_err(|e| format!("parse error: {}", e))?;
+
+    // Compute cumulative input/output/cache fractions from modelUsage.
+    // These are used to split each day's total into the three token types.
+    let (cum_input, cum_output, cum_cache) = cache.model_usage.values().fold(
+        (0u64, 0u64, 0u64),
+        |(i, o, c), m| {
+            (
+                i + m.input_tokens,
+                o + m.output_tokens,
+                c + m.cache_read_tokens + m.cache_creation_tokens,
+            )
+        },
+    );
+    let cum_total = cum_input + cum_output + cum_cache;
+
+    // Build daily usage entries — sort by ISO date then keep the last 30 days.
+    let mut daily = cache.daily_model_tokens;
+    daily.sort_by(|a, b| a.date.cmp(&b.date));
+    let mut entries: Vec<DailyUsage> = daily
+        .iter()
+        .map(|day| {
+            let total: u64 = day.tokens_by_model.values().sum();
+            let (inp, out, cac) = if cum_total > 0 {
+                let inp = ((total as u128 * cum_input as u128) / cum_total as u128) as u64;
+                let out = ((total as u128 * cum_output as u128) / cum_total as u128) as u64;
+                let cac = total - inp - out;
+                (inp, out, cac)
+            } else {
+                (total, 0, 0)
+            };
+            DailyUsage {
+                date: format_date_label(&day.date),
+                input_tokens: inp,
+                output_tokens: out,
+                cache_tokens: cac,
+            }
+        })
+        .collect();
+
+    if entries.len() > 30 {
+        entries = entries.split_off(entries.len() - 30);
+    }
+
+    // Build model stats sorted by total token count descending.
+    let mut model_stats: Vec<ModelStat> = cache
+        .model_usage
+        .into_iter()
+        .map(|(name, m)| ModelStat {
+            name,
+            input_tokens: m.input_tokens,
+            output_tokens: m.output_tokens,
+            cache_tokens: m.cache_read_tokens + m.cache_creation_tokens,
+        })
+        .collect();
+
+    model_stats.sort_by(|a, b| {
+        let ta = a.input_tokens + a.output_tokens + a.cache_tokens;
+        let tb = b.input_tokens + b.output_tokens + b.cache_tokens;
+        tb.cmp(&ta)
+    });
+
+    Ok(ClaudeStats {
+        daily_usage: entries,
+        model_stats,
+        total_sessions: cache.total_sessions,
+    })
+}
+
+/// Converts "2026-03-06" → "Mar 06" for chart axis labels.
+fn format_date_label(date: &str) -> String {
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let mut parts = date.splitn(3, '-');
+    let _year = parts.next();
+    let month = parts.next()
+        .and_then(|m| m.parse::<usize>().ok())
+        .map(|m| m.saturating_sub(1));
+    let day = parts.next().unwrap_or("??");
+    match month.and_then(|m| months.get(m)) {
+        Some(name) => format!("{} {}", name, day),
+        None => date.to_string(),
+    }
+}
+
+// ── App entry point ───────────────────────────────────────────────────────────
 
 /// Runs the Tauri application. Called from main.rs.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,6 +189,7 @@ pub fn run() {
     let pending_show: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![get_claude_stats])
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -58,15 +221,20 @@ pub fn run() {
                 });
             }
 
-            let icon = app
-                .default_window_icon()
-                .ok_or("default window icon not found")?
-                .clone();
+            // Load the dedicated tray icon from the bundled PNG bytes.
+            // Falls back to the default window icon if the file is missing.
+            let tray_icon = {
+                let bytes = include_bytes!("../icons/tray-icon.png");
+                tauri::image::Image::from_bytes(bytes)
+                    .ok()
+                    .or_else(|| app.default_window_icon().cloned())
+                    .ok_or("tray icon not found")?
+            };
 
             let last_shown_tray = last_shown.clone();
             let pending_show_tray = pending_show.clone();
             let tray = TrayIconBuilder::new()
-                .icon(icon)
+                .icon(tray_icon)
                 .icon_as_template(true)
                 .on_tray_icon_event(move |tray, event| {
                     if let tauri::tray::TrayIconEvent::Click {
@@ -135,6 +303,10 @@ pub fn run() {
         })
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::Focused(false) = event {
+                // Only hide the tray popup (main window), not any report windows.
+                if window.label() != "main" {
+                    return;
+                }
                 let elapsed_ms = last_shown_event
                     .lock()
                     .ok()
