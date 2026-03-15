@@ -15,6 +15,7 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
   const providerData = PROVIDERS[provider];
   const [liveUsageData, setLiveUsageData] = useState<UsageData[]>(providerData.usageData);
   const [liveTotalSessions, setLiveTotalSessions] = useState<number | null>(null);
+  const [liveTotalTokens, setLiveTotalTokens] = useState<number | null>(null);
 
   useEffect(() => {
     if (provider !== "claude") return;
@@ -22,6 +23,7 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
       .then((result) => {
         if (result.usageData.length > 0) setLiveUsageData(result.usageData);
         if (result.totalSessions > 0) setLiveTotalSessions(result.totalSessions);
+        if (result.totalTokens > 0) setLiveTotalTokens(result.totalTokens);
       })
       .catch(() => {
         // fall back to mock silently
@@ -29,7 +31,8 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
   }, [provider]);
 
   const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
-  const totalTokens = providerData.projectUsage.reduce((acc, curr) => acc + curr.tokens, 0);
+  const mockTotalTokens = providerData.projectUsage.reduce((acc, curr) => acc + curr.tokens, 0);
+  const totalTokens = liveTotalTokens ?? mockTotalTokens;
   return (
     <div className="min-h-screen bg-[#000814] flex items-start justify-center p-4 sm:p-6">
       <motion.div

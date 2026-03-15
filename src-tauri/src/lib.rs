@@ -164,7 +164,8 @@ fn format_date_label(date: &str) -> String {
     let _year = parts.next();
     let month = parts.next()
         .and_then(|m| m.parse::<usize>().ok())
-        .map(|m| m.saturating_sub(1));
+        .filter(|&m| m >= 1 && m <= 12)
+        .map(|m| m - 1);
     let day = parts.next().unwrap_or("??");
     match month.and_then(|m| months.get(m)) {
         Some(name) => format!("{} {}", name, day),

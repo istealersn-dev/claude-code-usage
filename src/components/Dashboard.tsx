@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
@@ -21,9 +21,9 @@ export function Dashboard() {
   const [provider, setProvider] = useState<Provider>("claude");
   const [viewMode, setViewMode] = useState<"projects" | "models">("projects");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  
+  const providerRef = useRef(provider);
+
   const providerData = PROVIDERS[provider];
 
   // State for data — real for Claude, mock for other providers
@@ -31,13 +31,8 @@ export function Dashboard() {
   const [usageData, setUsageData] = useState(providerData.usageData);
   const [realModelUsage, setRealModelUsage] = useState<typeof providerData.modelUsage | null>(null);
 
-  const loadClaudeStats = useCallback(() => {
-    return fetchClaudeStats()
-      .then((result) => {
-        if (result.usageData.length > 0) setUsageData(result.usageData);
-        if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
-      });
-  }, []);
+  // Keep ref in sync so async callbacks can check the current provider
+  useEffect(() => { providerRef.current = provider; }, [provider]);
 
   // Fetch real Claude stats on mount and whenever the user switches to Claude
   useEffect(() => {
@@ -47,12 +42,18 @@ export function Dashboard() {
       setContextUsage(providerData.currentUsage);
       return;
     }
-    // reset to mock before IPC resolves to avoid showing stale data
+    let cancelled = false;
     setUsageData(providerData.usageData);
     setContextUsage(providerData.currentUsage);
-    loadClaudeStats()
+    fetchClaudeStats()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.usageData.length > 0) setUsageData(result.usageData);
+        if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+      })
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
-  }, [provider, loadClaudeStats, providerData]);
+    return () => { cancelled = true; };
+  }, [provider, providerData]);
 
   const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
   const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
@@ -68,9 +69,11 @@ export function Dashboard() {
 
     if (provider === "claude") {
       // Re-fetch real data from the local stats file
-      loadClaudeStats()
-        .then(() => {
-          setRefreshKey((k) => k + 1);
+      fetchClaudeStats()
+        .then((result) => {
+          if (providerRef.current !== "claude") return;
+          if (result.usageData.length > 0) setUsageData(result.usageData);
+          if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
           setIsRefreshing(false);
         })
         .catch(() => {
@@ -91,7 +94,6 @@ export function Dashboard() {
           lastDay.outputTokens = Math.floor(lastDay.outputTokens * (0.9 + Math.random() * 0.2));
           newData[newData.length - 1] = lastDay;
           setUsageData(newData);
-          setRefreshKey((prev) => prev + 1);
           setIsRefreshing(false);
         })
         .catch(() => {
@@ -117,12 +119,7 @@ export function Dashboard() {
               <ProviderIcon className="w-4 h-4" style={{ color: providerData.themeColor }} />
               <select
                 value={provider}
-                onChange={(e) => {
-                  const next = e.target.value as Provider;
-                  setProvider(next);
-                  setContextUsage(PROVIDERS[next].currentUsage);
-                  setUsageData(PROVIDERS[next].usageData);
-                }}
+                onChange={(e) => setProvider(e.target.value as Provider)}
                 className="bg-transparent text-xs sm:text-sm font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none"
                 style={{ color: providerData.themeColor }}
               >
@@ -297,7 +294,7 @@ export function Dashboard() {
                           </span>
                         </div>
                         <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
-                          ${model.cost.toFixed(2)}
+                          {model.cost === 0 ? "—" : `$${model.cost.toFixed(2)}`}
                         </span>
                       </div>
                     ))}
@@ -311,20 +308,20 @@ export function Dashboard() {
         {/* Footer */}
         <div className="shrink-0 bg-[#000814] p-3 border-t border-[#003566] text-center">
           <button
-            onClick={async () => {
-              const existing = await WebviewWindow.getByLabel("detailed-report");
-              if (existing) {
-                await existing.setFocus();
-                return;
-              }
-              new WebviewWindow("detailed-report", {
-                url: `/?window=report&provider=${provider}`,
-                title: "Detailed Usage Report",
-                width: 1000,
-                height: 800,
-                decorations: true,
-                resizable: true,
-              });
+            onClick={() => {
+              WebviewWindow.getByLabel("detailed-report")
+                .then((existing) => {
+                  if (existing) return existing.setFocus();
+                  new WebviewWindow("detailed-report", {
+                    url: `/?window=report&provider=${provider}`,
+                    title: "Detailed Usage Report",
+                    width: 1000,
+                    height: 800,
+                    decorations: true,
+                    resizable: true,
+                  });
+                })
+                .catch(() => setError("Could not open report"));
             }}
             className="text-[10px] transition-colors uppercase tracking-widest font-bold"
             style={{ color: providerData.themeColor }}
