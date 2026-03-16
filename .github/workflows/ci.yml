@@ -43,7 +43,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -W clippy::all -W clippy::pedantic -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -W clippy::all -W clippy::pedantic -W missing_docs -D warnings
 
       - name: Build
         run: cargo build --manifest-path src-tauri/Cargo.toml
