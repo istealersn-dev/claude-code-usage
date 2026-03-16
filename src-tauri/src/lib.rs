@@ -1,3 +1,9 @@
+#![warn(clippy::all, clippy::pedantic)]
+#![allow(
+    clippy::too_many_lines,    // run() is a single Tauri builder chain — splitting would reduce clarity
+    clippy::missing_panics_doc // run() panics only on fatal app initialisation errors
+)]
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,7 +14,7 @@ use tauri::{Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
 /// Width of the menubar popup window in logical pixels — must match `tauri.conf.json`.
 const WIN_WIDTH_PX: f64 = 440.0;
 
-/// How long after show() to ignore focus-lost events (ms).
+/// How long after `show()` to ignore focus-lost events (ms).
 /// macOS fires a spurious Focused(false) during the tray-click sequence
 /// before focus fully settles on the webview.
 const FOCUS_SETTLE_MS: u128 = 800;
@@ -32,6 +38,7 @@ struct DailyModelTokens {
     tokens_by_model: HashMap<String, u64>,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(serde::Deserialize)]
 struct ModelUsageEntry {
     #[serde(rename = "inputTokens", default)]
@@ -82,10 +89,10 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
         .join("stats-cache.json");
 
     let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("stats-cache.json: {}", e))?;
+        .map_err(|e| format!("stats-cache.json: {e}"))?;
 
     let cache: StatsCache =
-        serde_json::from_str(&content).map_err(|e| format!("parse error: {}", e))?;
+        serde_json::from_str(&content).map_err(|e| format!("parse error: {e}"))?;
 
     // Compute cumulative input/output/cache fractions from modelUsage.
     // These are used to split each day's total into the three token types.
@@ -109,8 +116,10 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
         .map(|day| {
             let total: u64 = day.tokens_by_model.values().sum();
             let (inp, out, cac) = if cum_total > 0 {
-                let inp = ((total as u128 * cum_input as u128) / cum_total as u128) as u64;
-                let out = ((total as u128 * cum_output as u128) / cum_total as u128) as u64;
+                #[allow(clippy::cast_possible_truncation)] // result ≤ total ≤ u64::MAX by construction
+                let inp = (u128::from(total) * u128::from(cum_input) / u128::from(cum_total)) as u64;
+                #[allow(clippy::cast_possible_truncation)] // result ≤ total ≤ u64::MAX by construction
+                let out = (u128::from(total) * u128::from(cum_output) / u128::from(cum_total)) as u64;
                 let cac = total - inp - out;
                 (inp, out, cac)
             } else {
@@ -164,11 +173,11 @@ fn format_date_label(date: &str) -> String {
     let _year = parts.next();
     let month = parts.next()
         .and_then(|m| m.parse::<usize>().ok())
-        .filter(|&m| m >= 1 && m <= 12)
+        .filter(|&m| (1..=12).contains(&m))
         .map(|m| m - 1);
     let day = parts.next().unwrap_or("??");
     match month.and_then(|m| months.get(m)) {
-        Some(name) => format!("{} {}", name, day),
+        Some(name) => format!("{name} {day}"),
         None => date.to_string(),
     }
 }
@@ -204,8 +213,8 @@ pub fn run() {
                     use objc2::runtime::AnyObject;
                     use objc2::msg_send;
 
-                    let wkwebview = wv.inner() as *mut AnyObject;
-                    let ns_window = wv.ns_window() as *mut AnyObject;
+                    let wkwebview = wv.inner().cast::<AnyObject>();
+                    let ns_window = wv.ns_window().cast::<AnyObject>();
 
                     let _: () = msg_send![wkwebview, setOpaque: false];
 
@@ -272,17 +281,18 @@ pub fn run() {
                             let scale = window.scale_factor().unwrap_or(1.0);
                             let pos = rect.position.to_physical::<i32>(scale);
                             let size = rect.size.to_physical::<u32>(scale);
+                            #[allow(clippy::cast_possible_truncation)] // pixel values never exceed i32::MAX
                             let win_w = (WIN_WIDTH_PX * scale) as i32;
                             let screen_w = window
                                 .current_monitor()
                                 .ok()
                                 .flatten()
-                                .map(|m| m.size().width as i32)
-                                .unwrap_or(i32::MAX);
-                            let x = (pos.x + (size.width as i32) / 2 - win_w / 2)
+                                .map_or(i32::MAX, |m| m.size().width.cast_signed());
+                            let x = (pos.x + (size.width.cast_signed()) / 2 - win_w / 2)
                                 .max(0)
                                 .min(screen_w - win_w);
-                            let y = pos.y + size.height as i32 + (8.0 * scale) as i32;
+                            #[allow(clippy::cast_possible_truncation)] // 8px gap in physical pixels, always tiny
+                            let y = pos.y + size.height.cast_signed() + (8.0 * scale) as i32;
                             let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
                             pending_show_tray.store(true, Ordering::Release);
                             // Record show time before revealing the window so the
