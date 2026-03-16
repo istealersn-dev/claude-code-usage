@@ -42,6 +42,7 @@ export function Dashboard() {
       setContextUsage(providerData.currentUsage);
       return;
     }
+    setViewMode("models");
     let cancelled = false;
     setUsageData(providerData.usageData);
     setContextUsage(providerData.currentUsage);
@@ -148,7 +149,7 @@ export function Dashboard() {
                       exit={{ opacity: 0, y: 10 }}
                       className="text-[10px] sm:text-xs text-gray-400 font-mono"
                     >
-                      ${totalCost.toFixed(2)} this month
+                      {provider === "claude" ? "—" : `$${totalCost.toFixed(2)} this month`}
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -255,26 +256,32 @@ export function Dashboard() {
                     transition={{ duration: 0.2 }}
                     className="space-y-1 sm:space-y-2"
                   >
-                    {providerData.projectUsage.map((project) => (
-                      <div key={project.name} className="relative flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
-                        {/* Tooltip */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-[#000814] border border-[#003566] text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl translate-y-2 group-hover:translate-y-0">
-                          <span className="font-mono" style={{ color: providerData.themeColor }}>{(project.tokens / 1000).toFixed(0)}k</span> tokens
-                          <span className="mx-1 text-gray-500">•</span>
-                          <span className="text-white font-mono">${project.cost.toFixed(2)}</span>
-                        </div>
+                    {provider === "claude" ? (
+                      <p className="text-[10px] text-gray-500 text-center py-4 px-2 leading-relaxed">
+                        Project breakdown is not available — Claude Code does not expose per-project usage in stats-cache.json
+                      </p>
+                    ) : (
+                      providerData.projectUsage.map((project) => (
+                        <div key={project.name} className="relative flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-[#000814] border border-[#003566] text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl translate-y-2 group-hover:translate-y-0">
+                            <span className="font-mono" style={{ color: providerData.themeColor }}>{(project.tokens / 1000).toFixed(0)}k</span> tokens
+                            <span className="mx-1 text-gray-500">•</span>
+                            <span className="text-white font-mono">${project.cost.toFixed(2)}</span>
+                          </div>
 
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
-                          <span className="text-gray-300 group-hover:text-white transition-colors">
-                            {project.name}
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
+                            <span className="text-gray-300 group-hover:text-white transition-colors">
+                              {project.name}
+                            </span>
+                          </div>
+                          <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
+                            ${project.cost.toFixed(2)}
                           </span>
                         </div>
-                        <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
-                          ${project.cost.toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div

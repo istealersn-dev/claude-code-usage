@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use tauri::{Manager, tray::TrayIconBuilder};
+use tauri::{Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
 
 /// Width of the menubar popup window in logical pixels — must match `tauri.conf.json`.
 const WIN_WIDTH_PX: f64 = 440.0;
@@ -232,11 +232,21 @@ pub fn run() {
                     .ok_or("tray icon not found")?
             };
 
+            let quit_item = MenuItem::with_id(app, "quit", "Quit AI Pulse", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&quit_item])?;
+
             let last_shown_tray = last_shown.clone();
             let pending_show_tray = pending_show.clone();
             let tray = TrayIconBuilder::new()
                 .icon(tray_icon)
                 .icon_as_template(true)
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    if event.id == "quit" {
+                        app.exit(0);
+                    }
+                })
                 .on_tray_icon_event(move |tray, event| {
                     if let tauri::tray::TrayIconEvent::Click {
                         button: tauri::tray::MouseButton::Left,
@@ -303,19 +313,32 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |window, event| {
-            if let tauri::WindowEvent::Focused(false) = event {
-                // Only hide the tray popup (main window), not any report windows.
-                if window.label() != "main" {
-                    return;
+            match event {
+                // Switch to Regular when report window gets focus (makes it Cmd+Tab accessible).
+                tauri::WindowEvent::Focused(true) if window.label() == "detailed-report" => {
+                    #[cfg(target_os = "macos")]
+                    let _ = window.app_handle().set_activation_policy(tauri::ActivationPolicy::Regular);
                 }
-                let elapsed_ms = last_shown_event
-                    .lock()
-                    .ok()
-                    .and_then(|guard| guard.as_ref().map(|t| t.elapsed().as_millis()))
-                    .unwrap_or(u128::MAX);
-                if elapsed_ms > FOCUS_SETTLE_MS {
-                    let _ = window.hide();
+                // Switch back to Accessory when report window is destroyed.
+                tauri::WindowEvent::Destroyed if window.label() == "detailed-report" => {
+                    #[cfg(target_os = "macos")]
+                    let _ = window.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
                 }
+                tauri::WindowEvent::Focused(false) => {
+                    // Only hide the tray popup (main window), not any report windows.
+                    if window.label() != "main" {
+                        return;
+                    }
+                    let elapsed_ms = last_shown_event
+                        .lock()
+                        .ok()
+                        .and_then(|guard| guard.as_ref().map(|t| t.elapsed().as_millis()))
+                        .unwrap_or(u128::MAX);
+                    if elapsed_ms > FOCUS_SETTLE_MS {
+                        let _ = window.hide();
+                    }
+                }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())
