@@ -5,15 +5,13 @@ import { cn } from "@/lib/utils";
 
 type SettingsTab = "api-keys" | "budget" | "appearance" | "storage";
 
-// Issue 5: hoisted to module level — not recreated on every render
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: "api-keys", label: "API Keys", icon: Key },
-  { id: "budget", label: "Budget", icon: DollarSign },  // Issue 7: DollarSign, not Bell
+  { id: "budget", label: "Budget", icon: DollarSign },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "storage", label: "Storage", icon: Trash2 },
 ];
 
-// Issue 3: typed constant, no loose string array cast
 const COMING_SOON_PROVIDERS = [
   { label: "OpenAI (Codex)", placeholder: "sk-..." },
   { label: "Google (Gemini)", placeholder: "AIza..." },
@@ -23,14 +21,12 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   themeColor: string;
-  // Issue 1: accept scoped reset action rather than calling localStorage directly
   onResetPreferences: () => void;
 }
 
 export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api-keys");
 
-  // Issue 2: reset tab to default whenever modal transitions to open
   useEffect(() => {
     if (isOpen) setActiveTab("api-keys");
   }, [isOpen]);
