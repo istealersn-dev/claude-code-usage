@@ -259,12 +259,14 @@ pub fn run() {
             // effect that outperforms CSS backdrop-blur on macOS.
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
-                let _ = apply_vibrancy(
+                if let Err(e) = apply_vibrancy(
                     &window,
                     NSVisualEffectMaterial::HudWindow,
                     None,
                     Some(16.0),
-                );
+                ) {
+                    eprintln!("[ai-pulse] vibrancy unavailable: {e}");
+                }
             }
 
             // Load the dedicated tray icon from the bundled PNG bytes.
