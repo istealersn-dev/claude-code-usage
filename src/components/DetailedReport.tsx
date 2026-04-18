@@ -18,6 +18,9 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
   const [liveTotalSessions, setLiveTotalSessions] = useState<number | null>(null);
   const [liveTotalTokens, setLiveTotalTokens] = useState<number | null>(null);
   const [liveModelDetails, setLiveModelDetails] = useState<ModelDetail[]>([]);
+  const [claudeFetchState, setClaudeFetchState] = useState<"loading" | "done" | "error">(
+    provider === "claude" ? "loading" : "done"
+  );
 
   useEffect(() => {
     if (provider !== "claude") return;
@@ -27,9 +30,10 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
         if (result.totalSessions > 0) setLiveTotalSessions(result.totalSessions);
         if (result.totalTokens > 0) setLiveTotalTokens(result.totalTokens);
         if (result.modelDetails.length > 0) setLiveModelDetails(result.modelDetails);
+        setClaudeFetchState("done");
       })
       .catch(() => {
-        // fall back to mock silently
+        setClaudeFetchState("error");
       });
   }, [provider]);
 
@@ -117,7 +121,15 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
           </div>
 
           {/* Project Breakdown / Model Breakdown */}
-          {provider === "claude" && liveModelDetails.length > 0 ? (
+          {provider === "claude" && claudeFetchState === "loading" ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-xs text-gray-500 font-mono">Loading model data…</p>
+            </div>
+          ) : provider === "claude" && claudeFetchState === "error" ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-xs text-red-400 font-mono">Could not load Claude stats. Check that stats-cache.jsonl exists.</p>
+            </div>
+          ) : provider === "claude" && liveModelDetails.length > 0 ? (
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Box className="w-5 h-5" style={{ color: providerData.themeColor }} />
@@ -145,7 +157,7 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
                         </div>
                         <div>
                           <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Cache</p>
-                          <p className="text-sm font-mono text-white">{(model.cacheTokens / 1_000_000).toFixed(0)}M</p>
+                          <p className="text-sm font-mono text-white">{(model.cacheTokens / 1000).toFixed(0)}k</p>
                         </div>
                       </div>
                       <div className="h-1.5 rounded-full overflow-hidden flex">
