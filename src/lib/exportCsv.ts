@@ -3,26 +3,31 @@ import type { ModelDetail } from "./claudeUsage";
 
 function toCsvRow(cells: (string | number)[]): string {
   return cells
-    .map((c) => (typeof c === "string" && c.includes(",") ? `"${c}"` : String(c)))
+    .map((c) => {
+      const s = String(c);
+      if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    })
     .join(",");
 }
 
-export function exportUsageCsv(
+export function buildUsageCsv(
   usageData: UsageData[],
   modelDetails: ModelDetail[],
   provider: string
-): void {
+): string {
+  const now = new Date();
   const lines: string[] = [];
 
-  lines.push(`AI Pulse Export — ${provider} — ${new Date().toISOString()}`);
+  lines.push(`AI Pulse Export — ${provider} — ${now.toISOString()}`);
   lines.push("");
-
   lines.push("Daily Usage");
   lines.push(toCsvRow(["Date", "Input Tokens", "Output Tokens", "Cache Tokens"]));
   for (const row of usageData) {
     lines.push(toCsvRow([row.date, row.inputTokens, row.outputTokens, row.cacheTokens]));
   }
-
   if (modelDetails.length > 0) {
     lines.push("");
     lines.push("Model Breakdown");
@@ -31,12 +36,23 @@ export function exportUsageCsv(
       lines.push(toCsvRow([m.name, m.inputTokens, m.outputTokens, m.cacheTokens, m.totalTokens, m.costUsd.toFixed(6)]));
     }
   }
+  return lines.join("\n");
+}
 
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+const CSV_MIME_TYPE = "text/csv;charset=utf-8;";
+
+export function exportUsageCsv(
+  usageData: UsageData[],
+  modelDetails: ModelDetail[],
+  provider: string
+): void {
+  const now = new Date();
+  const csv = buildUsageCsv(usageData, modelDetails, provider);
+  const blob = new Blob([csv], { type: CSV_MIME_TYPE });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `ai-pulse-${provider.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `ai-pulse-${provider.toLowerCase()}-${now.toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
