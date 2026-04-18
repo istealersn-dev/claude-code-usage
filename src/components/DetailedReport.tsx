@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Download, FileText, BarChart2, Activity, Wrench, Puzzle, Layers, Code2 } from "lucide-react";
+import { X, Download, FileText, BarChart2, Activity, Wrench, Puzzle, Layers, Code2, Box } from "lucide-react";
 import { UsageChart } from "./UsageChart";
 import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats } from "@/lib/claudeUsage";
+import type { ModelDetail } from "@/lib/claudeUsage";
 import type { UsageData } from "@/lib/data";
 
 interface DetailedReportProps {
@@ -16,6 +17,10 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
   const [liveUsageData, setLiveUsageData] = useState<UsageData[]>(providerData.usageData);
   const [liveTotalSessions, setLiveTotalSessions] = useState<number | null>(null);
   const [liveTotalTokens, setLiveTotalTokens] = useState<number | null>(null);
+  const [liveModelDetails, setLiveModelDetails] = useState<ModelDetail[]>([]);
+  const [claudeFetchState, setClaudeFetchState] = useState<"loading" | "done" | "error">(
+    provider === "claude" ? "loading" : "done"
+  );
 
   useEffect(() => {
     if (provider !== "claude") return;
@@ -24,9 +29,11 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
         if (result.usageData.length > 0) setLiveUsageData(result.usageData);
         if (result.totalSessions > 0) setLiveTotalSessions(result.totalSessions);
         if (result.totalTokens > 0) setLiveTotalTokens(result.totalTokens);
+        if (result.modelDetails.length > 0) setLiveModelDetails(result.modelDetails);
+        setClaudeFetchState("done");
       })
       .catch(() => {
-        // fall back to mock silently
+        setClaudeFetchState("error");
       });
   }, [provider]);
 
@@ -70,7 +77,9 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
               <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Total Cost</p>
-              <p className="text-2xl font-mono text-white">${totalCost.toFixed(2)}</p>
+              <p className="text-2xl font-mono text-white">
+                {provider === "claude" ? "—" : `$${totalCost.toFixed(2)}`}
+              </p>
               <p className="text-[10px] text-emerald-400 mt-1">—</p>
             </div>
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
@@ -79,8 +88,14 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
               <p className="text-[10px] text-gray-500 mt-1">—</p>
             </div>
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
-              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Active Projects</p>
-              <p className="text-2xl font-mono text-white">{providerData.projectUsage.length}</p>
+              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">
+                {provider === "claude" ? "Models Active" : "Active Projects"}
+              </p>
+              <p className="text-2xl font-mono text-white">
+                {provider === "claude"
+                  ? (liveModelDetails.length > 0 ? liveModelDetails.length : providerData.modelUsage.length)
+                  : providerData.projectUsage.length}
+              </p>
               <p className="text-[10px] text-gray-500 mt-1">—</p>
             </div>
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
@@ -105,86 +120,142 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
             </div>
           </div>
 
-          {/* Project Breakdown */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <Layers className="w-5 h-5" style={{ color: providerData.themeColor }} />
-              <h3 className="text-lg font-semibold">Project Insights</h3>
+          {/* Project Breakdown / Model Breakdown */}
+          {provider === "claude" && claudeFetchState === "loading" ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-xs text-gray-500 font-mono">Loading model data…</p>
             </div>
-
-            <div className="space-y-6">
-              {providerData.detailedAnalytics.map((project) => (
-                <div key={project.name} className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-5">
-                  <div className="flex justify-between items-center border-b border-[#003566]/50 pb-3 mb-4">
-                    <h4 className="text-base font-medium" style={{ color: providerData.themeColor }}>{project.name}</h4>
-                    <span className="text-xs font-mono text-gray-400">{project.sessions} Sessions</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Tools Used */}
-                    <div>
-                      <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-                        <Wrench className="w-3 h-3" /> Tools
-                      </h5>
-                      <ul className="space-y-2">
-                        {project.toolsUsed.map(tool => (
-                          <li key={tool.name} className="flex justify-between text-xs">
-                            <span className="text-gray-300">{tool.name}</span>
-                            <span className="font-mono" style={{ color: providerData.themeColor }}>{tool.count}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Plugins Used */}
-                    <div>
-                      <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-                        <Puzzle className="w-3 h-3" /> Plugins
-                      </h5>
-                      <ul className="space-y-2">
-                        {project.pluginsUsed.map(plugin => (
-                          <li key={plugin.name} className="flex justify-between text-xs">
-                            <span className="text-gray-300">{plugin.name}</span>
-                            <span className="font-mono" style={{ color: providerData.themeColor }}>{plugin.count}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* MCP Usage */}
-                    <div>
-                      <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-                        <BarChart2 className="w-3 h-3" /> MCP
-                      </h5>
-                      <ul className="space-y-2">
-                        {project.mcpUsage.map(mcp => (
-                          <li key={mcp.name} className="flex justify-between text-xs">
-                            <span className="text-gray-300">{mcp.name}</span>
-                            <span className="font-mono" style={{ color: providerData.themeColor }}>{mcp.requests}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Skills Usage */}
-                    <div>
-                      <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-                        <Code2 className="w-3 h-3" /> Skills
-                      </h5>
-                      <ul className="space-y-2">
-                        {project.skillsUsage.map(skill => (
-                          <li key={skill.name} className="flex justify-between text-xs">
-                            <span className="text-gray-300">{skill.name}</span>
-                            <span className="font-mono" style={{ color: providerData.themeColor }}>{skill.count}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              ))}
+          ) : provider === "claude" && claudeFetchState === "error" ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-xs text-red-400 font-mono">Could not load Claude stats. Check that stats-cache.json exists.</p>
             </div>
-          </div>
+          ) : provider === "claude" && claudeFetchState === "done" && liveModelDetails.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-xs text-gray-500 font-mono">No model usage data found in stats-cache.json.</p>
+            </div>
+          ) : provider === "claude" && liveModelDetails.length > 0 ? (
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Box className="w-5 h-5" style={{ color: providerData.themeColor }} />
+                <h3 className="text-lg font-semibold">Model Breakdown</h3>
+              </div>
+              <div className="space-y-3">
+                {liveModelDetails.map((model) => {
+                  const inputPct = model.totalTokens > 0 ? (model.inputTokens / model.totalTokens) * 100 : 0;
+                  const outputPct = model.totalTokens > 0 ? (model.outputTokens / model.totalTokens) * 100 : 0;
+                  const cachePct = model.totalTokens > 0 ? (model.cacheTokens / model.totalTokens) * 100 : 0;
+                  return (
+                    <div key={model.name} className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-5">
+                      <div className="flex justify-between items-center border-b border-[#003566]/50 pb-3 mb-4">
+                        <h4 className="text-base font-medium font-mono" style={{ color: providerData.themeColor }}>{model.name}</h4>
+                        <span className="text-xs font-mono text-gray-400">{(model.totalTokens / 1_000_000).toFixed(1)}M total</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Input</p>
+                          <p className="text-sm font-mono text-white">{(model.inputTokens / 1000).toFixed(0)}k</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Output</p>
+                          <p className="text-sm font-mono text-white">{(model.outputTokens / 1000).toFixed(0)}k</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Cache</p>
+                          <p className="text-sm font-mono text-white">{(model.cacheTokens / 1000).toFixed(0)}k</p>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden flex">
+                        <div className="h-full" style={{ width: `${inputPct}%`, backgroundColor: providerData.themeColor, opacity: 0.9 }} />
+                        <div className="h-full" style={{ width: `${outputPct}%`, backgroundColor: providerData.themeColor, opacity: 0.5 }} />
+                        <div className="h-full" style={{ width: `${cachePct}%`, backgroundColor: providerData.themeColor, opacity: 0.2 }} />
+                      </div>
+                      <div className="flex gap-4 mt-2">
+                        <span className="text-[10px] text-gray-500">&#9632; Input</span>
+                        <span className="text-[10px] text-gray-500 opacity-60">&#9632; Output</span>
+                        <span className="text-[10px] text-gray-500 opacity-30">&#9632; Cache</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Layers className="w-5 h-5" style={{ color: providerData.themeColor }} />
+                <h3 className="text-lg font-semibold">Project Insights</h3>
+              </div>
+
+              <div className="space-y-6">
+                {providerData.detailedAnalytics.map((project) => (
+                  <div key={project.name} className="bg-[#001d3d]/20 border border-[#003566]/50 rounded-xl p-5">
+                    <div className="flex justify-between items-center border-b border-[#003566]/50 pb-3 mb-4">
+                      <h4 className="text-base font-medium" style={{ color: providerData.themeColor }}>{project.name}</h4>
+                      <span className="text-xs font-mono text-gray-400">{project.sessions} Sessions</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                      <div>
+                        <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                          <Wrench className="w-3 h-3" /> Tools
+                        </h5>
+                        <ul className="space-y-2">
+                          {project.toolsUsed.map(tool => (
+                            <li key={tool.name} className="flex justify-between text-xs">
+                              <span className="text-gray-300">{tool.name}</span>
+                              <span className="font-mono" style={{ color: providerData.themeColor }}>{tool.count}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div>
+                        <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                          <Puzzle className="w-3 h-3" /> Plugins
+                        </h5>
+                        <ul className="space-y-2">
+                          {project.pluginsUsed.map(plugin => (
+                            <li key={plugin.name} className="flex justify-between text-xs">
+                              <span className="text-gray-300">{plugin.name}</span>
+                              <span className="font-mono" style={{ color: providerData.themeColor }}>{plugin.count}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div>
+                        <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                          <BarChart2 className="w-3 h-3" /> MCP
+                        </h5>
+                        <ul className="space-y-2">
+                          {project.mcpUsage.map(mcp => (
+                            <li key={mcp.name} className="flex justify-between text-xs">
+                              <span className="text-gray-300">{mcp.name}</span>
+                              <span className="font-mono" style={{ color: providerData.themeColor }}>{mcp.requests}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div>
+                        <h5 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                          <Code2 className="w-3 h-3" /> Skills
+                        </h5>
+                        <ul className="space-y-2">
+                          {project.skillsUsage.map(skill => (
+                            <li key={skill.name} className="flex justify-between text-xs">
+                              <span className="text-gray-300">{skill.name}</span>
+                              <span className="font-mono" style={{ color: providerData.themeColor }}>{skill.count}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
     </div>

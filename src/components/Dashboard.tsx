@@ -19,47 +19,61 @@ const mockRefresh = (): Promise<void> =>
 
 export function Dashboard() {
   const [provider, setProvider] = useState<Provider>("claude");
-  const [viewMode, setViewMode] = useState<"projects" | "models">("projects");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const providerRef = useRef(provider);
 
   const providerData = PROVIDERS[provider];
 
-  // State for data — real for Claude, mock for other providers
-  const [contextUsage, setContextUsage] = useState(providerData.currentUsage);
-  const [usageData, setUsageData] = useState(providerData.usageData);
+  // Async overrides — set only from fetch callbacks, never synchronously in effects
+  const [claudeUsageData, setClaudeUsageData] = useState<typeof providerData.usageData | null>(null);
   const [realModelUsage, setRealModelUsage] = useState<typeof providerData.modelUsage | null>(null);
+  // Non-Claude mock-refresh override, keyed by provider to avoid stale data across provider switches
+  const [mockRefreshData, setMockRefreshData] = useState<{
+    provider: Provider;
+    usageData: typeof providerData.usageData;
+    contextUsage: number;
+  } | null>(null);
+
+  // Reset viewMode when provider changes — setState during render is the React-recommended
+  // pattern for "derived state from props" and avoids synchronous setState inside effects.
+  const [prevProvider, setPrevProvider] = useState<Provider>(provider);
+  const [viewMode, setViewMode] = useState<"projects" | "models">("models");
+  if (prevProvider !== provider) {
+    setPrevProvider(provider);
+    setViewMode(provider === "claude" ? "models" : "projects");
+  }
+
+  // Derived display values — no synchronous setState in effects needed
+  const usageData = provider === "claude"
+    ? (claudeUsageData ?? providerData.usageData)
+    : (mockRefreshData?.provider === provider ? mockRefreshData.usageData : providerData.usageData);
+  const contextUsage = provider !== "claude" && mockRefreshData?.provider === provider
+    ? mockRefreshData.contextUsage
+    : providerData.currentUsage;
+  const displayModelUsage = (provider === "claude" ? realModelUsage : null) ?? providerData.modelUsage;
+
+  const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
+  const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
+
+  const ProviderIcon = PROVIDER_ICONS[provider];
 
   // Keep ref in sync so async callbacks can check the current provider
   useEffect(() => { providerRef.current = provider; }, [provider]);
 
-  // Fetch real Claude stats on mount and whenever the user switches to Claude
+  // Fetch real Claude stats — setState only in async callbacks, never synchronously
   useEffect(() => {
-    if (provider !== "claude") {
-      setRealModelUsage(null);
-      setUsageData(providerData.usageData);
-      setContextUsage(providerData.currentUsage);
-      return;
-    }
+    if (provider !== "claude") return;
     let cancelled = false;
-    setUsageData(providerData.usageData);
-    setContextUsage(providerData.currentUsage);
     fetchClaudeStats()
       .then((result) => {
         if (cancelled) return;
-        if (result.usageData.length > 0) setUsageData(result.usageData);
+        if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
         if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
       })
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
     return () => { cancelled = true; };
-  }, [provider, providerData]);
-
-  const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
-  const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
-  const displayModelUsage = realModelUsage ?? providerData.modelUsage;
-
-  const ProviderIcon = PROVIDER_ICONS[provider];
+  }, [provider]);
 
   const handleRefresh = () => {
     if (isRefreshing) return;
@@ -72,7 +86,7 @@ export function Dashboard() {
       fetchClaudeStats()
         .then((result) => {
           if (providerRef.current !== "claude") return;
-          if (result.usageData.length > 0) setUsageData(result.usageData);
+          if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
           if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
           setIsRefreshing(false);
         })
@@ -85,15 +99,16 @@ export function Dashboard() {
       mockRefresh()
         .then(() => {
           const randomFactor = 0.95 + Math.random() * 0.1;
-          setContextUsage(
-            Math.min(providerData.contextLimit, Math.max(0, providerData.currentUsage * randomFactor))
+          const newContextUsage = Math.min(
+            providerData.contextLimit,
+            Math.max(0, providerData.currentUsage * randomFactor)
           );
           const newData = [...providerData.usageData];
           const lastDay = { ...newData[newData.length - 1] };
           lastDay.inputTokens = Math.floor(lastDay.inputTokens * (0.9 + Math.random() * 0.2));
           lastDay.outputTokens = Math.floor(lastDay.outputTokens * (0.9 + Math.random() * 0.2));
           newData[newData.length - 1] = lastDay;
-          setUsageData(newData);
+          setMockRefreshData({ provider, usageData: newData, contextUsage: newContextUsage });
           setIsRefreshing(false);
         })
         .catch(() => {
@@ -148,16 +163,16 @@ export function Dashboard() {
                       exit={{ opacity: 0, y: 10 }}
                       className="text-[10px] sm:text-xs text-gray-400 font-mono"
                     >
-                      ${totalCost.toFixed(2)} this month
+                      {provider === "claude" ? "—" : `$${totalCost.toFixed(2)} this month`}
                     </motion.span>
                   )}
                 </AnimatePresence>
                 <div className="flex items-center gap-2 text-gray-400">
-                    <RefreshCw 
+                    <RefreshCw
                       className={cn(
                         "w-3 h-3 hover:text-white cursor-pointer transition-all",
                         isRefreshing && "animate-spin text-[#ffd60a]"
-                      )} 
+                      )}
                       onClick={handleRefresh}
                     />
                 </div>
@@ -179,7 +194,7 @@ export function Dashboard() {
                  </p>
                </div>
             </div>
-            
+
             <div className="flex-1 space-y-2 sm:space-y-3">
                <div className="bg-[#001d3d]/40 p-2 sm:p-3 rounded-xl border border-[#003566]/50">
                  <div className="flex items-center gap-2 mb-1" style={{ color: providerData.themeColor }}>
@@ -190,7 +205,7 @@ export function Dashboard() {
                    Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>—</span> from last week.
                  </p>
                </div>
-               
+
                <div className="bg-[#001d3d]/40 p-2 sm:p-3 rounded-xl border border-[#003566]/50">
                  <div className="flex items-center gap-2 mb-1" style={{ color: providerData.themeColor }}>
                    <DollarSign className="w-3 h-3" />
@@ -221,8 +236,8 @@ export function Dashboard() {
                   onClick={() => setViewMode("projects")}
                   className={cn(
                     "px-3 py-1 text-[10px] uppercase font-bold rounded-md transition-all flex items-center gap-1",
-                    viewMode === "projects" 
-                      ? "bg-[#003566] shadow-sm" 
+                    viewMode === "projects"
+                      ? "bg-[#003566] shadow-sm"
                       : "text-gray-400 hover:text-white"
                   )}
                   style={viewMode === "projects" ? { color: providerData.themeColor } : {}}
@@ -233,8 +248,8 @@ export function Dashboard() {
                   onClick={() => setViewMode("models")}
                   className={cn(
                     "px-3 py-1 text-[10px] uppercase font-bold rounded-md transition-all flex items-center gap-1",
-                    viewMode === "models" 
-                      ? "bg-[#003566] shadow-sm" 
+                    viewMode === "models"
+                      ? "bg-[#003566] shadow-sm"
                       : "text-gray-400 hover:text-white"
                   )}
                   style={viewMode === "models" ? { color: providerData.themeColor } : {}}
@@ -255,26 +270,32 @@ export function Dashboard() {
                     transition={{ duration: 0.2 }}
                     className="space-y-1 sm:space-y-2"
                   >
-                    {providerData.projectUsage.map((project) => (
-                      <div key={project.name} className="relative flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
-                        {/* Tooltip */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-[#000814] border border-[#003566] text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl translate-y-2 group-hover:translate-y-0">
-                          <span className="font-mono" style={{ color: providerData.themeColor }}>{(project.tokens / 1000).toFixed(0)}k</span> tokens
-                          <span className="mx-1 text-gray-500">•</span>
-                          <span className="text-white font-mono">${project.cost.toFixed(2)}</span>
-                        </div>
+                    {provider === "claude" ? (
+                      <p className="text-[10px] text-gray-500 text-center py-4 px-2 leading-relaxed">
+                        Project breakdown is not available — Claude Code does not expose per-project usage in stats-cache.json
+                      </p>
+                    ) : (
+                      providerData.projectUsage.map((project) => (
+                        <div key={project.name} className="relative flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-[#000814] border border-[#003566] text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl translate-y-2 group-hover:translate-y-0">
+                            <span className="font-mono" style={{ color: providerData.themeColor }}>{(project.tokens / 1000).toFixed(0)}k</span> tokens
+                            <span className="mx-1 text-gray-500">•</span>
+                            <span className="text-white font-mono">${project.cost.toFixed(2)}</span>
+                          </div>
 
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
-                          <span className="text-gray-300 group-hover:text-white transition-colors">
-                            {project.name}
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
+                            <span className="text-gray-300 group-hover:text-white transition-colors">
+                              {project.name}
+                            </span>
+                          </div>
+                          <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
+                            ${project.cost.toFixed(2)}
                           </span>
                         </div>
-                        <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
-                          ${project.cost.toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div
@@ -304,7 +325,7 @@ export function Dashboard() {
             </div>
           </div>
         </div>
-        
+
         {/* Footer */}
         <div className="shrink-0 bg-[#000814] p-3 border-t border-[#003566] text-center">
           <button
