@@ -132,8 +132,11 @@ pub struct ClaudeStats {
 /// Reads ~/.claude/stats-cache.json and returns structured usage data.
 /// Returns Err if the file is missing or cannot be parsed — the frontend
 /// falls back to mock data on error.
+///
+/// `days` — optional window size (default 30). Slices the last N days from
+/// the sorted daily entries before returning.
 #[tauri::command]
-fn get_claude_stats() -> Result<ClaudeStats, String> {
+fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
     let path = claude_stats_path().ok_or_else(|| "HOME not set".to_string())?;
 
     let content = std::fs::read_to_string(&path)
@@ -182,8 +185,9 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
         })
         .collect();
 
-    if entries.len() > 30 {
-        entries = entries.split_off(entries.len() - 30);
+    let limit = days.unwrap_or(30) as usize;
+    if entries.len() > limit {
+        entries = entries.split_off(entries.len() - limit);
     }
 
     // Total cost: sum costUSD across all model entries.
