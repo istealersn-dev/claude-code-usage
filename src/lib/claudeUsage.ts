@@ -51,7 +51,12 @@ export interface ClaudeUsageResult {
 }
 
 export async function fetchClaudeStats(): Promise<ClaudeUsageResult> {
-  const raw = RawClaudeStatsSchema.parse(await invoke("get_claude_stats"));
+  const payload = await invoke("get_claude_stats");
+  const parsed = RawClaudeStatsSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw new Error(`IPC schema mismatch — check Rust/TS field alignment: ${parsed.error.message}`);
+  }
+  const raw = parsed.data;
 
   const usageData: UsageData[] = raw.daily_usage.map((d) => ({
     date: d.date,
