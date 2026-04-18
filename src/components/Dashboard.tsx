@@ -131,8 +131,8 @@ export function Dashboard() {
   useEffect(() => {
     invoke<boolean>("is_autolaunch_enabled")
       .then((enabled) => setAutoLaunchEnabled(enabled))
-      .catch(() => {
-        // no-op if autostart plugin unavailable (e.g. running in dev without plugin)
+      .catch((e: unknown) => {
+        if (import.meta.env.DEV) console.warn("is_autolaunch_enabled failed:", e);
       });
   }, [setAutoLaunchEnabled]);
 
@@ -147,6 +147,12 @@ export function Dashboard() {
     },
     [setAutoLaunchEnabled]
   );
+
+  const handleResetPreferences = useCallback(() => {
+    invoke<void>("toggle_autolaunch", { enable: false })
+      .then(() => resetPreferences())
+      .catch(() => setError("Could not disable auto-launch before reset"));
+  }, [resetPreferences]);
 
   // Fetch real Claude stats — setState only in async callbacks, never synchronously.
   // Also subscribes to the Rust-side file watcher so edits to stats-cache.json
@@ -556,11 +562,7 @@ export function Dashboard() {
           isOpen={isSettingsOpen}
           onClose={closeSettings}
           themeColor={providerData.themeColor}
-          onResetPreferences={() => {
-            invoke<void>("toggle_autolaunch", { enable: false })
-              .then(() => resetPreferences())
-              .catch(() => setError("Could not disable auto-launch before reset"));
-          }}
+          onResetPreferences={handleResetPreferences}
           budgetLimitUsd={budgetLimitUsd}
           onSetBudgetLimit={useAppStore.getState().setBudgetLimit}
           autoLaunchEnabled={autoLaunchEnabled}
