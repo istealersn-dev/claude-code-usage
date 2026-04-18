@@ -6,6 +6,7 @@ import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats } from "@/lib/claudeUsage";
 import type { ModelDetail } from "@/lib/claudeUsage";
 import type { UsageData } from "@/lib/data";
+import { exportUsageCsv } from "@/lib/exportCsv";
 
 interface DetailedReportProps {
   provider: Provider;
@@ -61,7 +62,11 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-[#003566] hover:bg-[#004b91] text-white rounded-lg transition-colors">
+            <button
+              onClick={() => exportUsageCsv(liveUsageData, liveModelDetails, providerData.name)}
+              disabled={provider === "claude" && claudeFetchState === "loading"}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-[#003566] hover:bg-[#004b91] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
               <Download className="w-3.5 h-3.5" /> Export CSV
             </button>
             <button
