@@ -15,12 +15,16 @@ interface RawModelStat {
   input_tokens: number;
   output_tokens: number;
   cache_tokens: number;
+  cost_usd: number;
 }
 
 interface RawClaudeStats {
   daily_usage: RawDailyUsage[];
   model_stats: RawModelStat[];
   total_sessions: number;
+  total_cost_usd: number;
+  trend_pct: number | null;
+  projected_monthly_cost_usd: number | null;
 }
 
 // ── Mapped result ─────────────────────────────────────────────────────────────
@@ -31,6 +35,7 @@ export interface ModelDetail {
   outputTokens: number;
   cacheTokens: number;
   totalTokens: number;
+  costUsd: number;
 }
 
 export interface ClaudeUsageResult {
@@ -39,6 +44,9 @@ export interface ClaudeUsageResult {
   modelDetails: ModelDetail[];
   totalTokens: number;
   totalSessions: number;
+  totalCostUsd: number;
+  trendPct: number | null;
+  projectedMonthlyCostUsd: number | null;
 }
 
 export async function fetchClaudeStats(): Promise<ClaudeUsageResult> {
@@ -58,13 +66,14 @@ export async function fetchClaudeStats(): Promise<ClaudeUsageResult> {
   for (const m of raw.model_stats) {
     const total = m.input_tokens + m.output_tokens + m.cache_tokens;
     totalTokens += total;
-    modelUsage.push({ name: m.name, tokens: total, cost: 0 });
+    modelUsage.push({ name: m.name, tokens: total, cost: m.cost_usd });
     modelDetails.push({
       name: m.name,
       inputTokens: m.input_tokens,
       outputTokens: m.output_tokens,
       cacheTokens: m.cache_tokens,
       totalTokens: total,
+      costUsd: m.cost_usd,
     });
   }
 
@@ -74,5 +83,8 @@ export async function fetchClaudeStats(): Promise<ClaudeUsageResult> {
     modelDetails,
     totalTokens,
     totalSessions: raw.total_sessions,
+    totalCostUsd: raw.total_cost_usd,
+    trendPct: raw.trend_pct,
+    projectedMonthlyCostUsd: raw.projected_monthly_cost_usd,
   };
 }
