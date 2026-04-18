@@ -124,7 +124,7 @@ export function Dashboard() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -20, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className="relative w-[360px] sm:w-[400px] max-h-[calc(100vh-50px)] flex flex-col bg-[#000814]/90 backdrop-blur-xl border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
+      className="relative w-[360px] sm:w-[400px] max-h-[calc(100vh-50px)] flex flex-col bg-[#000814]/60 border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
       style={{ '--theme-color': providerData.themeColor } as React.CSSProperties}
     >
       {/* Header */}
