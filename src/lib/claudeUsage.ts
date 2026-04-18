@@ -58,7 +58,7 @@ export interface ClaudeUsageResult {
 }
 
 export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME): Promise<ClaudeUsageResult> {
-  const days = TIMEFRAME_DAYS[timeframe] ?? 30;
+  const days = TIMEFRAME_DAYS[timeframe];
   const payload = await invoke("get_claude_stats", { days });
   const parsed = RawClaudeStatsSchema.safeParse(payload);
   if (!parsed.success) {

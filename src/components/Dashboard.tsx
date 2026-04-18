@@ -4,7 +4,7 @@ import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats, onClaudeStatsUpdated } from "@/lib/claudeUsage";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, ALL_TIMEFRAMES } from "@/lib/store";
 import type { Timeframe } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult } from "@/lib/claudeUsage";
@@ -230,7 +230,7 @@ export function Dashboard() {
           </div>
           {provider === "claude" && (
             <div className="px-3 sm:px-4 pb-2 flex items-center gap-1">
-              {(["1d", "3d", "7d", "30d"] satisfies Timeframe[]).map((t) => (
+              {ALL_TIMEFRAMES.map((t) => (
                 <button
                   key={t}
                   onClick={() => setTimeframe(t)}
