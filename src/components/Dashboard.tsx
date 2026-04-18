@@ -4,6 +4,8 @@ import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats } from "@/lib/claudeUsage";
+import { useAppStore } from "@/lib/store";
+import { useShallow } from "zustand/react/shallow";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,7 +20,9 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const [provider, setProvider] = useState<Provider>("claude");
+  const { provider, setProvider } = useAppStore(
+    useShallow((s) => ({ provider: s.provider, setProvider: s.setProvider }))
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const providerRef = useRef(provider);
