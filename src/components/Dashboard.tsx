@@ -557,8 +557,9 @@ export function Dashboard() {
           onClose={closeSettings}
           themeColor={providerData.themeColor}
           onResetPreferences={() => {
-            invoke<void>("toggle_autolaunch", { enable: false }).catch(() => {});
-            resetPreferences();
+            invoke<void>("toggle_autolaunch", { enable: false })
+              .then(() => resetPreferences())
+              .catch(() => setError("Could not disable auto-launch before reset"));
           }}
           budgetLimitUsd={budgetLimitUsd}
           onSetBudgetLimit={useAppStore.getState().setBudgetLimit}

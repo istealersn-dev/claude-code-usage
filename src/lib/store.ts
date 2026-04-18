@@ -52,7 +52,7 @@ export const useAppStore = create<AppState>()(
       closeSettings: () => set({ isSettingsOpen: false }),
       resetPreferences: () => {
         localStorage.removeItem("ai-pulse-store");
-        set({ provider: DEFAULT_PROVIDER, isSettingsOpen: false, budgetLimitUsd: null, autoLaunchEnabled: false });
+        set({ provider: DEFAULT_PROVIDER, timeframe: DEFAULT_TIMEFRAME, isSettingsOpen: false, budgetLimitUsd: null, autoLaunchEnabled: false });
       },
       budgetLimitUsd: null,
       setBudgetLimit: (limit) => set({ budgetLimitUsd: limit }),
