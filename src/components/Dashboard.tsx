@@ -32,6 +32,9 @@ export function Dashboard() {
   // Async overrides — set only from fetch callbacks, never synchronously in effects
   const [claudeUsageData, setClaudeUsageData] = useState<typeof providerData.usageData | null>(null);
   const [realModelUsage, setRealModelUsage] = useState<typeof providerData.modelUsage | null>(null);
+  const [claudeTotalCost, setClaudeTotalCost] = useState<number | null>(null);
+  const [claudeTrendPct, setClaudeTrendPct] = useState<number | null>(null);
+  const [claudeProjectedCost, setClaudeProjectedCost] = useState<number | null>(null);
   // Non-Claude mock-refresh override, keyed by provider to avoid stale data across provider switches
   const [mockRefreshData, setMockRefreshData] = useState<{
     provider: Provider;
@@ -74,6 +77,9 @@ export function Dashboard() {
         if (cancelled) return;
         if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
         if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+        setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
+        setClaudeTrendPct(result.trendPct);
+        setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
       })
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
     return () => { cancelled = true; };
@@ -92,6 +98,9 @@ export function Dashboard() {
           if (providerRef.current !== "claude") return;
           if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
           if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+          setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
+          setClaudeTrendPct(result.trendPct);
+          setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
           setIsRefreshing(false);
         })
         .catch(() => {
@@ -168,7 +177,9 @@ export function Dashboard() {
                       exit={{ opacity: 0, y: 10 }}
                       className="text-[10px] sm:text-xs text-gray-400 font-mono"
                     >
-                      {provider === "claude" ? "—" : `$${totalCost.toFixed(2)} this month`}
+                      {provider === "claude"
+                        ? (claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} total` : "—")
+                        : `$${totalCost.toFixed(2)} this month`}
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -207,7 +218,17 @@ export function Dashboard() {
                    <span className="text-[10px] uppercase font-bold">Trend</span>
                  </div>
                  <p className="text-[10px] sm:text-xs text-gray-300 leading-tight">
-                   Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>—</span> from last week.
+                   {provider === "claude" && claudeTrendPct !== null ? (
+                     <>
+                       Usage{" "}
+                       <span className="font-bold" style={{ color: providerData.themeColor }}>
+                         {claudeTrendPct >= 0 ? "+" : ""}{claudeTrendPct.toFixed(1)}%
+                       </span>{" "}
+                       vs last week.
+                     </>
+                   ) : (
+                     <>Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>—</span> from last week.</>
+                   )}
                  </p>
                </div>
 
@@ -217,7 +238,13 @@ export function Dashboard() {
                    <span className="text-[10px] uppercase font-bold">Projected</span>
                  </div>
                  <p className="text-[10px] sm:text-xs text-gray-300 leading-tight">
-                   Est. <span className="text-white font-mono">—</span> by month end.
+                   Est.{" "}
+                   <span className="text-white font-mono">
+                     {provider === "claude" && claudeProjectedCost !== null
+                       ? `$${claudeProjectedCost.toFixed(2)}`
+                       : "—"}
+                   </span>{" "}
+                   by month end.
                  </p>
                </div>
             </div>
