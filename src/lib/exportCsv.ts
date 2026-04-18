@@ -26,14 +26,14 @@ export function buildUsageCsv(
 
   lines.push(toCsvRow([`AI Pulse Export — ${provider} — ${now.toISOString()}`]));
   lines.push("");
-  lines.push("Daily Usage");
+  lines.push(toCsvRow(["Daily Usage"]));
   lines.push(toCsvRow(["Date", "Input Tokens", "Output Tokens", "Cache Tokens"]));
   for (const row of usageData) {
     lines.push(toCsvRow([row.date, row.inputTokens, row.outputTokens, row.cacheTokens]));
   }
   if (modelDetails.length > 0) {
     lines.push("");
-    lines.push("Model Breakdown");
+    lines.push(toCsvRow(["Model Breakdown"]));
     lines.push(toCsvRow(["Model", "Input Tokens", "Output Tokens", "Cache Tokens", "Total Tokens", "Cost USD"]));
     for (const m of modelDetails) {
       lines.push(toCsvRow([m.name, m.inputTokens, m.outputTokens, m.cacheTokens, m.totalTokens, m.costUsd.toFixed(6)]));
