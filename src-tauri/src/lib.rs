@@ -444,6 +444,7 @@ pub fn run() {
                         Ok(mut w) => {
                             if let Err(e) = w.watch(&watch_path, RecursiveMode::NonRecursive) {
                                 eprintln!("[ai-pulse] could not watch {}: {e}", watch_path.display());
+                                return;
                             }
                             w
                         }
