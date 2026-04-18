@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
@@ -6,6 +6,7 @@ import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats } from "@/lib/claudeUsage";
 import { useAppStore } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
+import type { ClaudeUsageResult } from "@/lib/claudeUsage";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,14 @@ export function Dashboard() {
     contextUsage: number;
   } | null>(null);
 
+  const applyClaudeResult = useCallback((result: ClaudeUsageResult) => {
+    if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
+    if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+    setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
+    setClaudeTrendPct(result.trendPct);
+    setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
+  }, []);
+
   // Reset viewMode when provider changes — setState during render is the React-recommended
   // pattern for "derived state from props" and avoids synchronous setState inside effects.
   const [prevProvider, setPrevProvider] = useState<Provider>(provider);
@@ -75,15 +84,11 @@ export function Dashboard() {
     fetchClaudeStats()
       .then((result) => {
         if (cancelled) return;
-        if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
-        if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
-        setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
-        setClaudeTrendPct(result.trendPct);
-        setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
+        applyClaudeResult(result);
       })
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
     return () => { cancelled = true; };
-  }, [provider]);
+  }, [provider, applyClaudeResult]);
 
   const handleRefresh = () => {
     if (isRefreshing) return;
@@ -96,11 +101,7 @@ export function Dashboard() {
       fetchClaudeStats()
         .then((result) => {
           if (providerRef.current !== "claude") return;
-          if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
-          if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
-          setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
-          setClaudeTrendPct(result.trendPct);
-          setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
+          applyClaudeResult(result);
           setIsRefreshing(false);
         })
         .catch(() => {
@@ -178,7 +179,7 @@ export function Dashboard() {
                       className="text-[10px] sm:text-xs text-gray-400 font-mono"
                     >
                       {provider === "claude"
-                        ? (claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} total` : "—")
+                        ? (claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} lifetime` : "—")
                         : `$${totalCost.toFixed(2)} this month`}
                     </motion.span>
                   )}

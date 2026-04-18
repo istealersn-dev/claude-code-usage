@@ -1,31 +1,32 @@
 import { invoke } from "@tauri-apps/api/core";
+import { z } from "zod";
 import type { UsageData, ModelUsage } from "./data";
 
-// ── Raw shapes returned by the Rust command ───────────────────────────────────
+// ── Zod schemas for IPC boundary validation ───────────────────────────────────
 
-interface RawDailyUsage {
-  date: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_tokens: number;
-}
+const RawDailyUsageSchema = z.object({
+  date: z.string(),
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  cache_tokens: z.number(),
+});
 
-interface RawModelStat {
-  name: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_tokens: number;
-  cost_usd: number;
-}
+const RawModelStatSchema = z.object({
+  name: z.string(),
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  cache_tokens: z.number(),
+  cost_usd: z.number(),
+});
 
-interface RawClaudeStats {
-  daily_usage: RawDailyUsage[];
-  model_stats: RawModelStat[];
-  total_sessions: number;
-  total_cost_usd: number;
-  trend_pct: number | null;
-  projected_monthly_cost_usd: number | null;
-}
+const RawClaudeStatsSchema = z.object({
+  daily_usage: z.array(RawDailyUsageSchema),
+  model_stats: z.array(RawModelStatSchema),
+  total_sessions: z.number(),
+  total_cost_usd: z.number(),
+  trend_pct: z.number().nullable(),
+  projected_monthly_cost_usd: z.number().nullable(),
+});
 
 // ── Mapped result ─────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ export interface ClaudeUsageResult {
 }
 
 export async function fetchClaudeStats(): Promise<ClaudeUsageResult> {
-  const raw = await invoke<RawClaudeStats>("get_claude_stats");
+  const raw = RawClaudeStatsSchema.parse(await invoke("get_claude_stats"));
 
   const usageData: UsageData[] = raw.daily_usage.map((d) => ({
     date: d.date,

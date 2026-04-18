@@ -204,20 +204,10 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
         }
     };
 
-    // Projected month-end cost: find current month's entries (by ISO date prefix
-    // "YYYY-MM" from `daily`, since `entries` carries formatted labels), then
-    // compute daily avg * 30.
-    let projected_monthly_cost_usd: Option<f64> = daily.last().map(|latest| {
-        let ym = &latest.date[..7.min(latest.date.len())]; // "YYYY-MM"
-        let month_entries = daily.iter().filter(|d| d.date.starts_with(ym)).count();
-        #[allow(clippy::cast_precision_loss)]
-        let days_elapsed = month_entries as f64;
-        if days_elapsed > 0.0 && total_cost_usd > 0.0 {
-            (total_cost_usd / days_elapsed) * 30.0
-        } else {
-            0.0
-        }
-    });
+    // Projection requires current-month cost slices which stats-cache.json
+    // does not provide (only lifetime per-model aggregates). Return None until
+    // a monthly data source is available.
+    let projected_monthly_cost_usd: Option<f64> = None;
 
     // Build model stats sorted by total token count descending.
     let mut model_stats: Vec<ModelStat> = cache
