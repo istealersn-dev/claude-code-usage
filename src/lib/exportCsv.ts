@@ -1,6 +1,9 @@
 import type { UsageData } from "./data";
 import type { ModelDetail } from "./claudeUsage";
 
+const CSV_MIME_TYPE = "text/csv;charset=utf-8;";
+const CSV_LINE_ENDING = "\r\n";
+
 function toCsvRow(cells: (string | number)[]): string {
   return cells
     .map((c) => {
@@ -16,12 +19,12 @@ function toCsvRow(cells: (string | number)[]): string {
 export function buildUsageCsv(
   usageData: UsageData[],
   modelDetails: ModelDetail[],
-  provider: string
+  provider: string,
+  now: Date
 ): string {
-  const now = new Date();
   const lines: string[] = [];
 
-  lines.push(`AI Pulse Export — ${provider} — ${now.toISOString()}`);
+  lines.push(toCsvRow([`AI Pulse Export — ${provider} — ${now.toISOString()}`]));
   lines.push("");
   lines.push("Daily Usage");
   lines.push(toCsvRow(["Date", "Input Tokens", "Output Tokens", "Cache Tokens"]));
@@ -36,10 +39,8 @@ export function buildUsageCsv(
       lines.push(toCsvRow([m.name, m.inputTokens, m.outputTokens, m.cacheTokens, m.totalTokens, m.costUsd.toFixed(6)]));
     }
   }
-  return lines.join("\n");
+  return lines.join(CSV_LINE_ENDING);
 }
-
-const CSV_MIME_TYPE = "text/csv;charset=utf-8;";
 
 export function exportUsageCsv(
   usageData: UsageData[],
@@ -47,12 +48,12 @@ export function exportUsageCsv(
   provider: string
 ): void {
   const now = new Date();
-  const csv = buildUsageCsv(usageData, modelDetails, provider);
+  const csv = buildUsageCsv(usageData, modelDetails, provider, now);
   const blob = new Blob([csv], { type: CSV_MIME_TYPE });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = `ai-pulse-${provider.toLowerCase()}-${now.toISOString().slice(0, 10)}.csv`;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
