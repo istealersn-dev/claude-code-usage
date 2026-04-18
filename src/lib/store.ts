@@ -6,6 +6,10 @@ import { DEFAULT_PROVIDER, PROVIDERS } from "./data";
 export interface AppState {
   provider: Provider;
   setProvider: (p: Provider) => void;
+  isSettingsOpen: boolean;
+  openSettings: () => void;
+  closeSettings: () => void;
+  resetPreferences: () => void;
 }
 
 const VALID_PROVIDERS = new Set(Object.keys(PROVIDERS));
@@ -19,6 +23,13 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       provider: DEFAULT_PROVIDER,
       setProvider: (p) => set({ provider: p }),
+      isSettingsOpen: false,
+      openSettings: () => set({ isSettingsOpen: true }),
+      closeSettings: () => set({ isSettingsOpen: false }),
+      resetPreferences: () => {
+        localStorage.removeItem("ai-pulse-store");
+        set({ provider: DEFAULT_PROVIDER, isSettingsOpen: false });
+      },
     }),
     {
       name: "ai-pulse-store",
