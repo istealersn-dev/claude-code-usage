@@ -16,7 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use tauri::{Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
+use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
+use tauri::{Emitter, Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
 
 #[cfg(target_os = "macos")]
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
@@ -28,6 +29,20 @@ const WIN_WIDTH_PX: f64 = 440.0;
 /// macOS fires a spurious Focused(false) during the tray-click sequence
 /// before focus fully settles on the webview.
 const FOCUS_SETTLE_MS: u128 = 800;
+
+/// Debounce window for coalescing burst writes from the Claude CLI to
+/// `stats-cache.json` before emitting a single `claude-stats-updated` event.
+const STATS_WATCHER_DEBOUNCE_MS: u64 = 500;
+
+/// Returns the path to `~/.claude/stats-cache.json`, or `None` if `$HOME`
+/// is unset. Used by both the IPC command and the file-watcher task.
+fn claude_stats_path() -> Option<std::path::PathBuf> {
+    std::env::var("HOME").ok().map(|home| {
+        std::path::PathBuf::from(home)
+            .join(".claude")
+            .join("stats-cache.json")
+    })
+}
 
 // ── Stats-cache data types ────────────────────────────────────────────────────
 
@@ -119,10 +134,7 @@ pub struct ClaudeStats {
 /// falls back to mock data on error.
 #[tauri::command]
 fn get_claude_stats() -> Result<ClaudeStats, String> {
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
-    let path = std::path::Path::new(&home)
-        .join(".claude")
-        .join("stats-cache.json");
+    let path = claude_stats_path().ok_or_else(|| "HOME not set".to_string())?;
 
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("stats-cache.json: {e}"))?;
@@ -409,6 +421,50 @@ pub fn run() {
                 .build(app)?;
 
             app.manage(tray);
+
+            // Watch ~/.claude/stats-cache.json for changes and emit an event
+            // to the main window so the frontend can re-fetch live.
+            // Debounces STATS_WATCHER_DEBOUNCE_MS to coalesce burst writes from Claude CLI.
+            if let Some(watch_path) = claude_stats_path() {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+                    // Bail out of the task entirely if the watcher cannot be created —
+                    // otherwise the channel would stay open (held by the closure) and
+                    // `rx.recv().await` below would block forever, leaking the task.
+                    let _watcher = match RecommendedWatcher::new(
+                        move |res: notify::Result<notify::Event>| {
+                            match res {
+                                Ok(_) => { let _ = tx.blocking_send(()); }
+                                Err(e) => eprintln!("[ai-pulse] watcher error: {e}"),
+                            }
+                        },
+                        NotifyConfig::default(),
+                    ) {
+                        Ok(mut w) => {
+                            if let Err(e) = w.watch(&watch_path, RecursiveMode::NonRecursive) {
+                                eprintln!("[ai-pulse] could not watch {}: {e}", watch_path.display());
+                                return;
+                            }
+                            w
+                        }
+                        Err(e) => {
+                            eprintln!("[ai-pulse] could not create file watcher: {e}");
+                            return;
+                        }
+                    };
+                    // `_watcher` binding keeps the watcher alive for the duration of
+                    // this task — dropping it stops file-system notifications.
+                    while rx.recv().await.is_some() {
+                        tokio::time::sleep(Duration::from_millis(STATS_WATCHER_DEBOUNCE_MS)).await;
+                        while rx.try_recv().is_ok() {}
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.emit("claude-stats-updated", ());
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .on_window_event(move |window, event| {

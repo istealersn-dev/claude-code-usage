@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { z } from "zod";
 import type { UsageData, ModelUsage } from "./data";
 
@@ -93,4 +94,8 @@ export async function fetchClaudeStats(): Promise<ClaudeUsageResult> {
     trendPct: raw.trend_pct,
     projectedMonthlyCostUsd: raw.projected_monthly_cost_usd,
   };
+}
+
+export async function onClaudeStatsUpdated(onUpdate: () => void): Promise<() => void> {
+  return listen<void>("claude-stats-updated", () => onUpdate());
 }
