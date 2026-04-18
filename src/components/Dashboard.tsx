@@ -83,25 +83,28 @@ export function Dashboard() {
   useEffect(() => {
     if (provider !== "claude") return;
     let cancelled = false;
-    let unlistenFn: (() => void) | null = null;
     fetchClaudeStats()
       .then((result) => {
         if (cancelled) return;
         applyClaudeResult(result);
       })
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
-    onClaudeStatsUpdated(() => {
+    // Store the promise itself — cleanup resolves it and calls the unlisten fn.
+    // Previous `.then((fn) => { unlistenFn = fn })` raced with React StrictMode's
+    // double-invoke of the cleanup closure: cleanup could fire before the
+    // promise resolved, leaving the listener attached forever.
+    const unlistenPromise = onClaudeStatsUpdated(() => {
       if (cancelled) return;
       fetchClaudeStats()
         .then((result) => {
           if (cancelled) return;
           applyClaudeResult(result);
         })
-        .catch(() => {});
-    }).then((fn) => { unlistenFn = fn; }).catch(() => {});
+        .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache watcher fallback:", e); });
+    });
     return () => {
       cancelled = true;
-      unlistenFn?.();
+      unlistenPromise.then((fn) => fn()).catch(() => {});
     };
   }, [provider, applyClaudeResult]);
 
