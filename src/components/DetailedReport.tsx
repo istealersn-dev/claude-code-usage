@@ -127,7 +127,11 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
             </div>
           ) : provider === "claude" && claudeFetchState === "error" ? (
             <div className="flex items-center justify-center py-12">
-              <p className="text-xs text-red-400 font-mono">Could not load Claude stats. Check that stats-cache.jsonl exists.</p>
+              <p className="text-xs text-red-400 font-mono">Could not load Claude stats. Check that stats-cache.json exists.</p>
+            </div>
+          ) : provider === "claude" && claudeFetchState === "done" && liveModelDetails.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-xs text-gray-500 font-mono">No model usage data found in stats-cache.json.</p>
             </div>
           ) : provider === "claude" && liveModelDetails.length > 0 ? (
             <div>
