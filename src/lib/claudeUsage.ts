@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { z } from "zod";
 import type { UsageData, ModelUsage } from "./data";
+import type { Timeframe } from "./store";
+import { DEFAULT_TIMEFRAME } from "./store";
 
 // ── Zod schemas for IPC boundary validation ───────────────────────────────────
 
@@ -29,7 +31,7 @@ const RawClaudeStatsSchema = z.object({
   projected_monthly_cost_usd: z.number().nullable(),
 });
 
-const TIMEFRAME_DAYS: Record<string, number> = {
+const TIMEFRAME_DAYS: Record<Timeframe, number> = {
   "1d": 1, "3d": 3, "7d": 7, "30d": 30,
 };
 
@@ -55,7 +57,7 @@ export interface ClaudeUsageResult {
   projectedMonthlyCostUsd: number | null;
 }
 
-export async function fetchClaudeStats(timeframe = "30d"): Promise<ClaudeUsageResult> {
+export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME): Promise<ClaudeUsageResult> {
   const days = TIMEFRAME_DAYS[timeframe] ?? 30;
   const payload = await invoke("get_claude_stats", { days });
   const parsed = RawClaudeStatsSchema.safeParse(payload);

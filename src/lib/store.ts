@@ -9,6 +9,7 @@ export const DEFAULT_TIMEFRAME: Timeframe = "30d";
 
 export const ALL_TIMEFRAMES: Timeframe[] = ["1d", "3d", "7d", "30d"];
 
+
 export interface AppState {
   provider: Provider;
   setProvider: (p: Provider) => void;

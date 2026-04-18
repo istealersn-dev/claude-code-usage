@@ -230,7 +230,7 @@ export function Dashboard() {
           </div>
           {provider === "claude" && (
             <div className="px-3 sm:px-4 pb-2 flex items-center gap-1">
-              {(["1d", "3d", "7d", "30d"] as const).map((t: Timeframe) => (
+              {(["1d", "3d", "7d", "30d"] satisfies Timeframe[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTimeframe(t)}
@@ -306,7 +306,7 @@ export function Dashboard() {
           {/* Chart Section */}
           <div>
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> {provider === "claude" ? timeframe : "30d"} Token Trend
+              <TrendingUp className="w-3 h-3" /> {provider === "claude" ? `${timeframe} Token Trend` : "Token Trend"}
             </h3>
             <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
               <UsageChart data={usageData} color={providerData.themeColor} />

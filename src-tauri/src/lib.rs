@@ -185,15 +185,9 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         })
         .collect();
 
-    let limit = days.unwrap_or(30) as usize;
-    if entries.len() > limit {
-        entries = entries.split_off(entries.len() - limit);
-    }
-
-    // Total cost: sum costUSD across all model entries.
-    let total_cost_usd: f64 = cache.model_usage.values().map(|m| m.cost_usd).sum();
-
     // Trend: % change in total tokens, last 7 days vs previous 7 days.
+    // Must be computed on the full sorted dataset BEFORE slicing to `limit`,
+    // otherwise short windows (1d, 3d, 7d) always produce trend_pct = None.
     let trend_pct: Option<f64> = {
         let n = entries.len();
         if n >= 7 {
@@ -219,6 +213,14 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
             None
         }
     };
+
+    let limit = days.map_or(30_usize, |d| d as usize);
+    if entries.len() > limit {
+        entries = entries.split_off(entries.len() - limit);
+    }
+
+    // Total cost: sum costUSD across all model entries.
+    let total_cost_usd: f64 = cache.model_usage.values().map(|m| m.cost_usd).sum();
 
     // Projection requires current-month cost slices which stats-cache.json
     // does not provide (only lifetime per-model aggregates). Return None until
