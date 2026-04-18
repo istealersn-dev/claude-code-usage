@@ -4,7 +4,8 @@ import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats, onClaudeStatsUpdated } from "@/lib/claudeUsage";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, ALL_TIMEFRAMES } from "@/lib/store";
+import type { Timeframe } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult } from "@/lib/claudeUsage";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -22,10 +23,12 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const { provider, setProvider, isSettingsOpen, openSettings, closeSettings, resetPreferences } = useAppStore(
+  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences } = useAppStore(
     useShallow((s) => ({
       provider: s.provider,
       setProvider: s.setProvider,
+      timeframe: s.timeframe,
+      setTimeframe: s.setTimeframe,
       isSettingsOpen: s.isSettingsOpen,
       openSettings: s.openSettings,
       closeSettings: s.closeSettings,
@@ -89,21 +92,17 @@ export function Dashboard() {
   // Also subscribes to the Rust-side file watcher so edits to stats-cache.json
   // auto-refresh the dashboard without needing manual refresh.
   useEffect(() => {
-    if (provider !== "claude") return;
+    if (provider !== "claude" || isRefreshing) return;
     let cancelled = false;
-    fetchClaudeStats()
+    fetchClaudeStats(timeframe)
       .then((result) => {
         if (cancelled) return;
         applyClaudeResult(result);
       })
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
-    // Store the promise itself — cleanup resolves it and calls the unlisten fn.
-    // Previous `.then((fn) => { unlistenFn = fn })` raced with React StrictMode's
-    // double-invoke of the cleanup closure: cleanup could fire before the
-    // promise resolved, leaving the listener attached forever.
     const unlistenPromise = onClaudeStatsUpdated(() => {
       if (cancelled) return;
-      fetchClaudeStats()
+      fetchClaudeStats(timeframe)
         .then((result) => {
           if (cancelled) return;
           applyClaudeResult(result);
@@ -114,7 +113,7 @@ export function Dashboard() {
       cancelled = true;
       unlistenPromise.then((fn) => fn()).catch(() => {});
     };
-  }, [provider, applyClaudeResult]);
+  }, [provider, applyClaudeResult, timeframe, isRefreshing]);
 
   const handleRefresh = () => {
     if (isRefreshing) return;
@@ -124,7 +123,7 @@ export function Dashboard() {
 
     if (provider === "claude") {
       // Re-fetch real data from the local stats file
-      fetchClaudeStats()
+      fetchClaudeStats(timeframe)
         .then((result) => {
           if (providerRef.current !== "claude") return;
           applyClaudeResult(result);
@@ -229,6 +228,25 @@ export function Dashboard() {
                 </div>
             </div>
           </div>
+          {provider === "claude" && (
+            <div className="px-3 sm:px-4 pb-2 flex items-center gap-1">
+              {ALL_TIMEFRAMES.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTimeframe(t)}
+                  className={cn(
+                    "px-2 py-0.5 text-[10px] uppercase font-bold rounded transition-all",
+                    timeframe === t
+                      ? "bg-[#003566]"
+                      : "text-gray-500 hover:text-gray-300"
+                  )}
+                  style={timeframe === t ? { color: providerData.themeColor } : {}}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6 custom-scrollbar">
@@ -288,7 +306,7 @@ export function Dashboard() {
           {/* Chart Section */}
           <div>
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> 30-Day Token Trend
+              <TrendingUp className="w-3 h-3" /> {provider === "claude" ? `${timeframe} Token Trend` : "Token Trend"}
             </h3>
             <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
               <UsageChart data={usageData} color={providerData.themeColor} />
