@@ -18,6 +18,8 @@ export interface AppState {
   openSettings: () => void;
   closeSettings: () => void;
   resetPreferences: () => void;
+  budgetLimitUsd: number | null;
+  setBudgetLimit: (limit: number | null) => void;
 }
 
 const VALID_PROVIDERS = new Set(Object.keys(PROVIDERS));
@@ -44,19 +46,27 @@ export const useAppStore = create<AppState>()(
       closeSettings: () => set({ isSettingsOpen: false }),
       resetPreferences: () => {
         localStorage.removeItem("ai-pulse-store");
-        set({ provider: DEFAULT_PROVIDER, isSettingsOpen: false });
+        set({ provider: DEFAULT_PROVIDER, isSettingsOpen: false, budgetLimitUsd: null });
       },
+      budgetLimitUsd: null,
+      setBudgetLimit: (limit) => set({ budgetLimitUsd: limit }),
     }),
     {
       name: "ai-pulse-store",
-      partialize: (state) => ({ provider: state.provider, timeframe: state.timeframe }),
+      partialize: (state) => ({ provider: state.provider, timeframe: state.timeframe, budgetLimitUsd: state.budgetLimitUsd }),
       merge: (persisted, current) => {
-        const p = (persisted as Partial<AppState>).provider;
-        const t = (persisted as Partial<AppState>).timeframe;
+        const raw = persisted as Partial<AppState>;
+        const p = raw.provider;
+        const t = raw.timeframe;
+        const b = raw.budgetLimitUsd;
+        const validBudget = (b === null || b === undefined)
+          ? null
+          : (typeof b === "number" && isFinite(b) && b >= 0 ? b : null);
         return {
           ...current,
           provider: isValidProvider(p) ? p : DEFAULT_PROVIDER,
           timeframe: isValidTimeframe(t) ? t : DEFAULT_TIMEFRAME,
+          budgetLimitUsd: validBudget,
         };
       },
     }

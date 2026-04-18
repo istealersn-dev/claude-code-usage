@@ -22,9 +22,11 @@ interface SettingsModalProps {
   onClose: () => void;
   themeColor: string;
   onResetPreferences: () => void;
+  budgetLimitUsd: number | null;
+  onSetBudgetLimit: (limit: number | null) => void;
 }
 
-export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences, budgetLimitUsd, onSetBudgetLimit }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api-keys");
 
   useEffect(() => {
@@ -106,16 +108,25 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences 
                   <label className="text-[10px] uppercase text-gray-400 tracking-wider block mb-1">
                     Monthly Budget (USD)
                   </label>
-                  {/* Issue 4: readOnly + aria-disabled instead of disabled */}
                   <input
                     type="number"
                     placeholder="e.g. 50"
-                    readOnly
-                    aria-disabled="true"
-                    className="w-full bg-[#001d3d]/40 border border-[#003566]/50 rounded-lg px-3 py-2 text-xs text-gray-500 font-mono cursor-not-allowed"
+                    min="0"
+                    step="0.01"
+                    value={budgetLimitUsd !== null ? String(budgetLimitUsd) : ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") {
+                        onSetBudgetLimit(null);
+                        return;
+                      }
+                      const parsed = parseFloat(raw);
+                      onSetBudgetLimit(isFinite(parsed) && parsed >= 0 ? parsed : null);
+                    }}
+                    className="w-full bg-[#001d3d]/40 border border-[#003566]/50 rounded-lg px-3 py-2 text-xs text-gray-300 font-mono focus:outline-none focus:border-[#003566]"
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Budget alerts coming in a future release.</p>
+                <p className="text-[10px] text-gray-500">Set a limit to see a warning banner when exceeded.</p>
               </div>
             )}
 
