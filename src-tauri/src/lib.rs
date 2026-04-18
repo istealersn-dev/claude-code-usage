@@ -18,6 +18,9 @@ use std::time::{Duration, Instant};
 
 use tauri::{Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
 
+#[cfg(target_os = "macos")]
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+
 /// Width of the menubar popup window in logical pixels — must match `tauri.conf.json`.
 const WIN_WIDTH_PX: f64 = 440.0;
 
@@ -250,6 +253,18 @@ pub fn run() {
                         let _: () = msg_send![ns_window, setBackgroundColor: clear];
                     }
                 });
+            }
+
+            // Apply native vibrancy — gives a true system-compositor frosted-glass
+            // effect that outperforms CSS backdrop-blur on macOS.
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = apply_vibrancy(
+                    &window,
+                    NSVisualEffectMaterial::HudWindow,
+                    None,
+                    Some(16.0),
+                );
             }
 
             // Load the dedicated tray icon from the bundled PNG bytes.
