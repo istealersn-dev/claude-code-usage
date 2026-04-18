@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { PROVIDERS, Provider } from "@/lib/data";
-import { fetchClaudeStats } from "@/lib/claudeUsage";
+import { fetchClaudeStats, onClaudeStatsUpdated } from "@/lib/claudeUsage";
 import { useAppStore } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult } from "@/lib/claudeUsage";
@@ -77,17 +77,32 @@ export function Dashboard() {
   // Keep ref in sync so async callbacks can check the current provider
   useEffect(() => { providerRef.current = provider; }, [provider]);
 
-  // Fetch real Claude stats — setState only in async callbacks, never synchronously
+  // Fetch real Claude stats — setState only in async callbacks, never synchronously.
+  // Also subscribes to the Rust-side file watcher so edits to stats-cache.json
+  // auto-refresh the dashboard without needing manual refresh.
   useEffect(() => {
     if (provider !== "claude") return;
     let cancelled = false;
+    let unlistenFn: (() => void) | null = null;
     fetchClaudeStats()
       .then((result) => {
         if (cancelled) return;
         applyClaudeResult(result);
       })
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
-    return () => { cancelled = true; };
+    onClaudeStatsUpdated(() => {
+      if (cancelled) return;
+      fetchClaudeStats()
+        .then((result) => {
+          if (cancelled) return;
+          applyClaudeResult(result);
+        })
+        .catch(() => {});
+    }).then((fn) => { unlistenFn = fn; }).catch(() => {});
+    return () => {
+      cancelled = true;
+      unlistenFn?.();
+    };
   }, [provider, applyClaudeResult]);
 
   const handleRefresh = () => {
