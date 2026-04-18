@@ -9,6 +9,7 @@ export interface AppState {
   isSettingsOpen: boolean;
   openSettings: () => void;
   closeSettings: () => void;
+  resetPreferences: () => void;
 }
 
 const VALID_PROVIDERS = new Set(Object.keys(PROVIDERS));
@@ -25,6 +26,10 @@ export const useAppStore = create<AppState>()(
       isSettingsOpen: false,
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
+      resetPreferences: () => {
+        localStorage.removeItem("ai-pulse-store");
+        set({ provider: DEFAULT_PROVIDER, isSettingsOpen: false });
+      },
     }),
     {
       name: "ai-pulse-store",

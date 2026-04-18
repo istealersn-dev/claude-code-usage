@@ -1,25 +1,39 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Key, Bell, Palette, Trash2 } from "lucide-react";
+import { X, Key, DollarSign, Palette, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SettingsTab = "api-keys" | "budget" | "appearance" | "storage";
+
+// Issue 5: hoisted to module level — not recreated on every render
+const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
+  { id: "api-keys", label: "API Keys", icon: Key },
+  { id: "budget", label: "Budget", icon: DollarSign },  // Issue 7: DollarSign, not Bell
+  { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "storage", label: "Storage", icon: Trash2 },
+];
+
+// Issue 3: typed constant, no loose string array cast
+const COMING_SOON_PROVIDERS = [
+  { label: "OpenAI (Codex)", placeholder: "sk-..." },
+  { label: "Google (Gemini)", placeholder: "AIza..." },
+] as const;
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   themeColor: string;
+  // Issue 1: accept scoped reset action rather than calling localStorage directly
+  onResetPreferences: () => void;
 }
 
-export function SettingsModal({ isOpen, onClose, themeColor }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api-keys");
 
-  const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
-    { id: "api-keys", label: "API Keys", icon: Key },
-    { id: "budget", label: "Budget", icon: Bell },
-    { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "storage", label: "Storage", icon: Trash2 },
-  ];
+  // Issue 2: reset tab to default whenever modal transitions to open
+  useEffect(() => {
+    if (isOpen) setActiveTab("api-keys");
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -46,7 +60,7 @@ export function SettingsModal({ isOpen, onClose, themeColor }: SettingsModalProp
 
           {/* Tab nav */}
           <div className="shrink-0 flex gap-1 px-4 pt-3">
-            {tabs.map(({ id, label, icon: Icon }) => (
+            {SETTINGS_TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
@@ -71,15 +85,18 @@ export function SettingsModal({ isOpen, onClose, themeColor }: SettingsModalProp
                 <p className="text-[10px] text-gray-400">
                   Claude Code reads data locally — no API key needed. Keys are required for Codex and Gemini (coming soon).
                 </p>
-                {(["OpenAI", "Google"] as const).map((provider) => (
-                  <div key={provider}>
+                {/* Issue 3: typed constant, no loose cast */}
+                {COMING_SOON_PROVIDERS.map((p) => (
+                  <div key={p.label}>
                     <label className="text-[10px] uppercase text-gray-400 tracking-wider block mb-1">
-                      {provider} API Key
+                      {p.label} API Key
                     </label>
+                    {/* Issue 4: readOnly + aria-disabled instead of disabled */}
                     <input
                       type="password"
-                      placeholder="sk-..."
-                      disabled
+                      placeholder={p.placeholder}
+                      readOnly
+                      aria-disabled="true"
                       className="w-full bg-[#001d3d]/40 border border-[#003566]/50 rounded-lg px-3 py-2 text-xs text-gray-500 font-mono cursor-not-allowed"
                     />
                   </div>
@@ -93,10 +110,12 @@ export function SettingsModal({ isOpen, onClose, themeColor }: SettingsModalProp
                   <label className="text-[10px] uppercase text-gray-400 tracking-wider block mb-1">
                     Monthly Budget (USD)
                   </label>
+                  {/* Issue 4: readOnly + aria-disabled instead of disabled */}
                   <input
                     type="number"
                     placeholder="e.g. 50"
-                    disabled
+                    readOnly
+                    aria-disabled="true"
                     className="w-full bg-[#001d3d]/40 border border-[#003566]/50 rounded-lg px-3 py-2 text-xs text-gray-500 font-mono cursor-not-allowed"
                   />
                 </div>
@@ -115,8 +134,9 @@ export function SettingsModal({ isOpen, onClose, themeColor }: SettingsModalProp
                 <p className="text-[10px] text-gray-400 leading-relaxed">
                   AI Pulse reads data directly from local AI assistant files — it stores no data of its own except your settings preferences.
                 </p>
+                {/* Issue 1: delegate to scoped reset action from store */}
                 <button
-                  onClick={() => { localStorage.clear(); onClose(); }}
+                  onClick={onResetPreferences}
                   className="w-full px-3 py-2 text-xs font-medium bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-lg transition-colors border border-red-900/50"
                 >
                   Clear Saved Preferences

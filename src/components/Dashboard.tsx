@@ -22,13 +22,14 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const { provider, setProvider, isSettingsOpen, openSettings, closeSettings } = useAppStore(
+  const { provider, setProvider, isSettingsOpen, openSettings, closeSettings, resetPreferences } = useAppStore(
     useShallow((s) => ({
       provider: s.provider,
       setProvider: s.setProvider,
       isSettingsOpen: s.isSettingsOpen,
       openSettings: s.openSettings,
       closeSettings: s.closeSettings,
+      resetPreferences: s.resetPreferences,
     }))
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -192,10 +193,14 @@ export function Dashboard() {
                   )}
                 </AnimatePresence>
                 <div className="flex items-center gap-2 text-gray-400">
-                    <Settings
-                      className="w-3 h-3 hover:text-white cursor-pointer transition-colors"
+                    {/* Issue 6: interactive element must be a <button> */}
+                    <button
                       onClick={openSettings}
-                    />
+                      aria-label="Open settings"
+                      className="text-gray-400 hover:text-white transition-colors"
+                    >
+                      <Settings className="w-3 h-3" />
+                    </button>
                     <RefreshCw
                       className={cn(
                         "w-3 h-3 hover:text-white cursor-pointer transition-all",
@@ -398,6 +403,7 @@ export function Dashboard() {
           isOpen={isSettingsOpen}
           onClose={closeSettings}
           themeColor={providerData.themeColor}
+          onResetPreferences={resetPreferences}
         />
       </motion.div>
   );
