@@ -59,6 +59,8 @@ struct ModelUsageEntry {
     cache_read_tokens: u64,
     #[serde(rename = "cacheCreationInputTokens", default)]
     cache_creation_tokens: u64,
+    #[serde(rename = "costUSD", default)]
+    cost_usd: f64,
 }
 
 // ── IPC return types ──────────────────────────────────────────────────────────
@@ -76,7 +78,7 @@ pub struct DailyUsage {
     cache_tokens: u64,
 }
 
-/// Aggregate token counts for a single Claude model, returned as part of [`ClaudeStats`].
+/// Aggregate token counts and cost for a single Claude model, returned as part of [`ClaudeStats`].
 #[derive(serde::Serialize)]
 pub struct ModelStat {
     /// Model identifier as it appears in `stats-cache.json`, e.g. `"claude-sonnet-4-6"`.
@@ -87,17 +89,27 @@ pub struct ModelStat {
     output_tokens: u64,
     /// Combined cache read and cache creation tokens for this model.
     cache_tokens: u64,
+    /// Total cost in USD for this model, sourced directly from `costUSD` in stats-cache.json.
+    cost_usd: f64,
 }
 
 /// Top-level response returned by [`get_claude_stats`] over Tauri IPC.
 #[derive(serde::Serialize)]
 pub struct ClaudeStats {
-    /// Last 30 days of usage, sorted oldest-first, with date labels ready for chart axes.
+    /// Last N days of usage (default 30), sorted oldest-first, date labels ready for chart axes.
     daily_usage: Vec<DailyUsage>,
     /// Per-model breakdown, sorted by total token count descending.
     model_stats: Vec<ModelStat>,
     /// Lifetime session count from `stats-cache.json`.
     total_sessions: u64,
+    /// Sum of costUSD across all models — total spend to date.
+    total_cost_usd: f64,
+    /// Percentage change in tokens: last 7 days vs previous 7 days.
+    /// None if fewer than 7 days of data exist.
+    trend_pct: Option<f64>,
+    /// Projected month-end cost based on daily average of current month.
+    /// None if no data exists.
+    projected_monthly_cost_usd: Option<f64>,
 }
 
 // ── IPC command ───────────────────────────────────────────────────────────────
@@ -162,6 +174,51 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
         entries = entries.split_off(entries.len() - 30);
     }
 
+    // Total cost: sum costUSD across all model entries.
+    let total_cost_usd: f64 = cache.model_usage.values().map(|m| m.cost_usd).sum();
+
+    // Trend: % change in total tokens, last 7 days vs previous 7 days.
+    let trend_pct: Option<f64> = {
+        let n = entries.len();
+        if n >= 7 {
+            let last7: u64 = entries[n - 7..]
+                .iter()
+                .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
+                .sum();
+            let prev7: u64 = if n >= 14 {
+                entries[n - 14..n - 7]
+                    .iter()
+                    .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
+                    .sum()
+            } else {
+                0
+            };
+            if prev7 > 0 {
+                #[allow(clippy::cast_precision_loss)]
+                Some(((last7 as f64 - prev7 as f64) / prev7 as f64) * 100.0)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    // Projected month-end cost: find current month's entries (by ISO date prefix
+    // "YYYY-MM" from `daily`, since `entries` carries formatted labels), then
+    // compute daily avg * 30.
+    let projected_monthly_cost_usd: Option<f64> = daily.last().map(|latest| {
+        let ym = &latest.date[..7.min(latest.date.len())]; // "YYYY-MM"
+        let month_entries = daily.iter().filter(|d| d.date.starts_with(ym)).count();
+        #[allow(clippy::cast_precision_loss)]
+        let days_elapsed = month_entries as f64;
+        if days_elapsed > 0.0 && total_cost_usd > 0.0 {
+            (total_cost_usd / days_elapsed) * 30.0
+        } else {
+            0.0
+        }
+    });
+
     // Build model stats sorted by total token count descending.
     let mut model_stats: Vec<ModelStat> = cache
         .model_usage
@@ -171,6 +228,7 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
             input_tokens: m.input_tokens,
             output_tokens: m.output_tokens,
             cache_tokens: m.cache_read_tokens + m.cache_creation_tokens,
+            cost_usd: m.cost_usd,
         })
         .collect();
 
@@ -184,6 +242,9 @@ fn get_claude_stats() -> Result<ClaudeStats, String> {
         daily_usage: entries,
         model_stats,
         total_sessions: cache.total_sessions,
+        total_cost_usd,
+        trend_pct,
+        projected_monthly_cost_usd,
     })
 }
 
