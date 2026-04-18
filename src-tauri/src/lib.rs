@@ -97,7 +97,7 @@ struct ModelUsageEntry {
 // ── IPC return types ──────────────────────────────────────────────────────────
 
 /// Token usage for a single calendar day, returned as part of [`ClaudeStats`].
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 pub struct DailyUsage {
     /// Date label formatted for chart axes, e.g. `"Mar 06"`.
     date: String,
@@ -461,7 +461,10 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         });
     }
 
-    let (today, earliest) = codex_window_bounds(window);
+    // Walk at least 14 days so trend_pct (last-7 vs prev-7) has enough data even
+    // when the user selects a short window like 1d/3d/7d.
+    let trend_window = window.max(14);
+    let (today, earliest) = codex_window_bounds(trend_window);
 
     // Per-day token totals (pre-split into input/output/cache buckets).
     let mut daily_input: HashMap<String, u64> = HashMap::new();
@@ -617,6 +620,11 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         let tb = b.input_tokens + b.output_tokens + b.cache_tokens;
         tb.cmp(&ta)
     });
+
+    // Slice daily_usage to the requested window before returning.
+    // trend_pct was computed on the full trend_window dataset above.
+    let start = daily_usage.len().saturating_sub(window as usize);
+    let daily_usage = daily_usage[start..].to_vec();
 
     Ok(ClaudeStats {
         daily_usage,
@@ -804,7 +812,10 @@ pub fn run() {
             // rollout-*.jsonl writes from active Codex CLI sessions and emit
             // "codex-stats-updated" so the frontend re-fetches live.
             if let Some(codex_watch_path) = codex_sessions_path() {
-                if codex_watch_path.exists() {
+                // Ensure the directory exists so the watcher can be registered
+                // even when Codex CLI is installed after AI Pulse is already running.
+                let _ = std::fs::create_dir_all(&codex_watch_path);
+                {
                     let app_handle = app.handle().clone();
                     tauri::async_runtime::spawn(async move {
                         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
@@ -838,7 +849,7 @@ pub fn run() {
                             }
                         }
                     });
-                }
+                } // end inner scope (app_handle borrow)
             }
 
             // Watch ~/.claude/stats-cache.json for changes and emit an event

@@ -63,17 +63,16 @@ export function Dashboard() {
   } | null>(null);
 
   const applyClaudeResult = useCallback((result: ClaudeUsageResult) => {
-    if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
-    if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+    setClaudeUsageData(result.usageData);
+    setRealModelUsage(result.modelUsage);
     setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
     setClaudeTrendPct(result.trendPct);
     setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
   }, []);
 
   const applyCodexResult = useCallback((result: CodexUsageResult) => {
-    if (result.usageData.length > 0) setCodexUsageData(result.usageData);
-    if (result.modelUsage.length > 0) setRealCodexModelUsage(result.modelUsage);
-    // Codex logs no USD cost — surface null so UI renders "—".
+    setCodexUsageData(result.usageData);
+    setRealCodexModelUsage(result.modelUsage);
     setCodexTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
     setCodexTrendPct(result.trendPct);
   }, []);
@@ -82,10 +81,12 @@ export function Dashboard() {
   // pattern for "derived state from props" and avoids synchronous setState inside effects.
   const [prevProvider, setPrevProvider] = useState<Provider>(provider);
   const [viewMode, setViewMode] = useState<"projects" | "models">("models");
+  const isRealDataProvider = provider === "claude" || provider === "codex";
+
   if (prevProvider !== provider) {
     setPrevProvider(provider);
     // Claude + Codex expose models but no per-project data — default to models.
-    setViewMode(provider === "claude" || provider === "codex" ? "models" : "projects");
+    setViewMode(isRealDataProvider ? "models" : "projects");
   }
 
   // Derived display values — no synchronous setState in effects needed.
@@ -295,7 +296,7 @@ export function Dashboard() {
                 </div>
             </div>
           </div>
-          {(provider === "claude" || provider === "codex") && (
+          {isRealDataProvider && (
             <div className="px-3 sm:px-4 pb-2 flex items-center gap-1">
               {ALL_TIMEFRAMES.map((t) => (
                 <button
@@ -390,7 +391,7 @@ export function Dashboard() {
           {/* Chart Section */}
           <div>
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> {(provider === "claude" || provider === "codex") ? `${timeframe} Token Trend` : "Token Trend"}
+              <TrendingUp className="w-3 h-3" /> {isRealDataProvider ? `${timeframe} Token Trend` : "Token Trend"}
             </h3>
             <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
               <UsageChart data={usageData} color={providerData.themeColor} />
