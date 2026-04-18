@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
@@ -6,6 +6,7 @@ import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats } from "@/lib/claudeUsage";
 import { useAppStore } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
+import type { ClaudeUsageResult } from "@/lib/claudeUsage";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,12 +33,23 @@ export function Dashboard() {
   // Async overrides — set only from fetch callbacks, never synchronously in effects
   const [claudeUsageData, setClaudeUsageData] = useState<typeof providerData.usageData | null>(null);
   const [realModelUsage, setRealModelUsage] = useState<typeof providerData.modelUsage | null>(null);
+  const [claudeTotalCost, setClaudeTotalCost] = useState<number | null>(null);
+  const [claudeTrendPct, setClaudeTrendPct] = useState<number | null>(null);
+  const [claudeProjectedCost, setClaudeProjectedCost] = useState<number | null>(null);
   // Non-Claude mock-refresh override, keyed by provider to avoid stale data across provider switches
   const [mockRefreshData, setMockRefreshData] = useState<{
     provider: Provider;
     usageData: typeof providerData.usageData;
     contextUsage: number;
   } | null>(null);
+
+  const applyClaudeResult = useCallback((result: ClaudeUsageResult) => {
+    if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
+    if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+    setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
+    setClaudeTrendPct(result.trendPct);
+    setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
+  }, []);
 
   // Reset viewMode when provider changes — setState during render is the React-recommended
   // pattern for "derived state from props" and avoids synchronous setState inside effects.
@@ -72,12 +84,11 @@ export function Dashboard() {
     fetchClaudeStats()
       .then((result) => {
         if (cancelled) return;
-        if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
-        if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+        applyClaudeResult(result);
       })
       .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("stats-cache fallback:", e); });
     return () => { cancelled = true; };
-  }, [provider]);
+  }, [provider, applyClaudeResult]);
 
   const handleRefresh = () => {
     if (isRefreshing) return;
@@ -90,8 +101,7 @@ export function Dashboard() {
       fetchClaudeStats()
         .then((result) => {
           if (providerRef.current !== "claude") return;
-          if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
-          if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+          applyClaudeResult(result);
           setIsRefreshing(false);
         })
         .catch(() => {
@@ -168,7 +178,9 @@ export function Dashboard() {
                       exit={{ opacity: 0, y: 10 }}
                       className="text-[10px] sm:text-xs text-gray-400 font-mono"
                     >
-                      {provider === "claude" ? "—" : `$${totalCost.toFixed(2)} this month`}
+                      {provider === "claude"
+                        ? (claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} lifetime` : "—")
+                        : `$${totalCost.toFixed(2)} this month`}
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -207,7 +219,17 @@ export function Dashboard() {
                    <span className="text-[10px] uppercase font-bold">Trend</span>
                  </div>
                  <p className="text-[10px] sm:text-xs text-gray-300 leading-tight">
-                   Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>—</span> from last week.
+                   {provider === "claude" && claudeTrendPct !== null ? (
+                     <>
+                       Usage{" "}
+                       <span className="font-bold" style={{ color: providerData.themeColor }}>
+                         {claudeTrendPct >= 0 ? "+" : ""}{claudeTrendPct.toFixed(1)}%
+                       </span>{" "}
+                       vs last week.
+                     </>
+                   ) : (
+                     <>Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>—</span> from last week.</>
+                   )}
                  </p>
                </div>
 
@@ -217,7 +239,13 @@ export function Dashboard() {
                    <span className="text-[10px] uppercase font-bold">Projected</span>
                  </div>
                  <p className="text-[10px] sm:text-xs text-gray-300 leading-tight">
-                   Est. <span className="text-white font-mono">—</span> by month end.
+                   Est.{" "}
+                   <span className="text-white font-mono">
+                     {provider === "claude" && claudeProjectedCost !== null
+                       ? `$${claudeProjectedCost.toFixed(2)}`
+                       : "—"}
+                   </span>{" "}
+                   by month end.
                  </p>
                </div>
             </div>
@@ -226,7 +254,7 @@ export function Dashboard() {
           {/* Chart Section */}
           <div>
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> 7-Day Token Trend
+              <TrendingUp className="w-3 h-3" /> 30-Day Token Trend
             </h3>
             <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
               <UsageChart data={usageData} color={providerData.themeColor} />
