@@ -24,6 +24,8 @@ export interface AppState {
   resetPreferences: () => void;
   budgetLimitUsd: number | null;
   setBudgetLimit: (limit: number | null) => void;
+  autoLaunchEnabled: boolean;
+  setAutoLaunchEnabled: (enabled: boolean) => void;
 }
 
 const VALID_PROVIDERS = new Set(Object.keys(PROVIDERS));
@@ -54,15 +56,23 @@ export const useAppStore = create<AppState>()(
       },
       budgetLimitUsd: null,
       setBudgetLimit: (limit) => set({ budgetLimitUsd: limit }),
+      autoLaunchEnabled: false,
+      setAutoLaunchEnabled: (enabled) => set({ autoLaunchEnabled: enabled }),
     }),
     {
       name: "ai-pulse-store",
-      partialize: (state) => ({ provider: state.provider, timeframe: state.timeframe, budgetLimitUsd: state.budgetLimitUsd }),
+      partialize: (state) => ({
+        provider: state.provider,
+        timeframe: state.timeframe,
+        budgetLimitUsd: state.budgetLimitUsd,
+        autoLaunchEnabled: state.autoLaunchEnabled,
+      }),
       merge: (persisted, current) => {
         const raw = persisted as Partial<AppState>;
         const p = raw.provider;
         const t = raw.timeframe;
         const b = raw.budgetLimitUsd;
+        const a = raw.autoLaunchEnabled;
         const validBudget = (b === null || b === undefined)
           ? null
           : (typeof b === "number" && isFinite(b) && b >= 0 ? b : null);
@@ -71,6 +81,7 @@ export const useAppStore = create<AppState>()(
           provider: isValidProvider(p) ? p : DEFAULT_PROVIDER,
           timeframe: isValidTimeframe(t) ? t : DEFAULT_TIMEFRAME,
           budgetLimitUsd: validBudget,
+          autoLaunchEnabled: typeof a === "boolean" ? a : false,
         };
       },
     }

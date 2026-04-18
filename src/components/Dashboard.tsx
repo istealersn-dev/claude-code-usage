@@ -11,6 +11,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult } from "@/lib/claudeUsage";
 import type { CodexUsageResult } from "@/lib/codexUsage";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { invoke } from "@tauri-apps/api/core";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsModal } from "./SettingsModal";
@@ -25,7 +26,7 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd } = useAppStore(
+  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd, autoLaunchEnabled, setAutoLaunchEnabled } = useAppStore(
     useShallow((s) => ({
       provider: s.provider,
       setProvider: s.setProvider,
@@ -36,6 +37,8 @@ export function Dashboard() {
       closeSettings: s.closeSettings,
       resetPreferences: s.resetPreferences,
       budgetLimitUsd: s.budgetLimitUsd,
+      autoLaunchEnabled: s.autoLaunchEnabled,
+      setAutoLaunchEnabled: s.setAutoLaunchEnabled,
     }))
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -121,6 +124,28 @@ export function Dashboard() {
 
   // Keep ref in sync so async callbacks can check the current provider
   useEffect(() => { providerRef.current = provider; }, [provider]);
+
+  // On mount, sync the Zustand store from the OS's real autostart state —
+  // the LaunchAgent plist may have been removed outside the app, so the
+  // persisted boolean cannot be trusted as source of truth.
+  useEffect(() => {
+    invoke<boolean>("is_autolaunch_enabled")
+      .then((enabled) => setAutoLaunchEnabled(enabled))
+      .catch(() => {
+        // no-op if autostart plugin unavailable (e.g. running in dev without plugin)
+      });
+  }, [setAutoLaunchEnabled]);
+
+  const handleToggleAutoLaunch = useCallback(
+    (enable: boolean) => {
+      invoke<void>("toggle_autolaunch", { enable })
+        .then(() => setAutoLaunchEnabled(enable))
+        .catch((e: unknown) => {
+          if (import.meta.env.DEV) console.warn("toggle_autolaunch failed:", e);
+        });
+    },
+    [setAutoLaunchEnabled]
+  );
 
   // Fetch real Claude stats — setState only in async callbacks, never synchronously.
   // Also subscribes to the Rust-side file watcher so edits to stats-cache.json
@@ -533,6 +558,8 @@ export function Dashboard() {
           onResetPreferences={resetPreferences}
           budgetLimitUsd={budgetLimitUsd}
           onSetBudgetLimit={useAppStore.getState().setBudgetLimit}
+          autoLaunchEnabled={autoLaunchEnabled}
+          onToggleAutoLaunch={handleToggleAutoLaunch}
         />
       </motion.div>
   );
