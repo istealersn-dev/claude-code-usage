@@ -16,7 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use tauri::{Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
+use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
+use tauri::{Emitter, Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
 
 #[cfg(target_os = "macos")]
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
@@ -409,6 +410,38 @@ pub fn run() {
                 .build(app)?;
 
             app.manage(tray);
+
+            // Watch ~/.claude/stats-cache.json for changes and emit an event
+            // to the main window so the frontend can re-fetch live.
+            // Debounces 500ms to coalesce burst writes from Claude CLI.
+            if let Ok(home) = std::env::var("HOME") {
+                let watch_path = std::path::PathBuf::from(&home)
+                    .join(".claude")
+                    .join("stats-cache.json");
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+                    let mut watcher = RecommendedWatcher::new(
+                        move |res: notify::Result<notify::Event>| {
+                            if res.is_ok() {
+                                let _ = tx.blocking_send(());
+                            }
+                        },
+                        NotifyConfig::default(),
+                    );
+                    if let Ok(ref mut w) = watcher {
+                        let _ = w.watch(&watch_path, RecursiveMode::NonRecursive);
+                    }
+                    while rx.recv().await.is_some() {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        while rx.try_recv().is_ok() {}
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.emit("claude-stats-updated", ());
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .on_window_event(move |window, event| {
