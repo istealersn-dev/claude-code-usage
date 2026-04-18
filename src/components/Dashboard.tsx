@@ -8,8 +8,9 @@ import { useAppStore } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult } from "@/lib/claudeUsage";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles } from "lucide-react";
+import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SettingsModal } from "./SettingsModal";
 
 const PROVIDER_ICONS: Record<Provider, React.ElementType> = {
   claude: Zap,
@@ -21,8 +22,14 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const { provider, setProvider } = useAppStore(
-    useShallow((s) => ({ provider: s.provider, setProvider: s.setProvider }))
+  const { provider, setProvider, isSettingsOpen, openSettings, closeSettings } = useAppStore(
+    useShallow((s) => ({
+      provider: s.provider,
+      setProvider: s.setProvider,
+      isSettingsOpen: s.isSettingsOpen,
+      openSettings: s.openSettings,
+      closeSettings: s.closeSettings,
+    }))
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +192,10 @@ export function Dashboard() {
                   )}
                 </AnimatePresence>
                 <div className="flex items-center gap-2 text-gray-400">
+                    <Settings
+                      className="w-3 h-3 hover:text-white cursor-pointer transition-colors"
+                      onClick={openSettings}
+                    />
                     <RefreshCw
                       className={cn(
                         "w-3 h-3 hover:text-white cursor-pointer transition-all",
@@ -383,6 +394,11 @@ export function Dashboard() {
             View Detailed Report
           </button>
         </div>
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={closeSettings}
+          themeColor={providerData.themeColor}
+        />
       </motion.div>
   );
 }
