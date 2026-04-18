@@ -29,6 +29,10 @@ const RawClaudeStatsSchema = z.object({
   projected_monthly_cost_usd: z.number().nullable(),
 });
 
+const TIMEFRAME_DAYS: Record<string, number> = {
+  "1d": 1, "3d": 3, "7d": 7, "30d": 30,
+};
+
 // ── Mapped result ─────────────────────────────────────────────────────────────
 
 export interface ModelDetail {
@@ -51,8 +55,9 @@ export interface ClaudeUsageResult {
   projectedMonthlyCostUsd: number | null;
 }
 
-export async function fetchClaudeStats(): Promise<ClaudeUsageResult> {
-  const payload = await invoke("get_claude_stats");
+export async function fetchClaudeStats(timeframe = "30d"): Promise<ClaudeUsageResult> {
+  const days = TIMEFRAME_DAYS[timeframe] ?? 30;
+  const payload = await invoke("get_claude_stats", { days });
   const parsed = RawClaudeStatsSchema.safeParse(payload);
   if (!parsed.success) {
     throw new Error(`IPC schema mismatch — check Rust/TS field alignment: ${parsed.error.message}`);
