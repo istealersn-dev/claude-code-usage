@@ -23,7 +23,7 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences } = useAppStore(
+  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd, setBudgetLimit } = useAppStore(
     useShallow((s) => ({
       provider: s.provider,
       setProvider: s.setProvider,
@@ -33,6 +33,8 @@ export function Dashboard() {
       openSettings: s.openSettings,
       closeSettings: s.closeSettings,
       resetPreferences: s.resetPreferences,
+      budgetLimitUsd: s.budgetLimitUsd,
+      setBudgetLimit: s.setBudgetLimit,
     }))
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -249,6 +251,13 @@ export function Dashboard() {
           )}
         </div>
 
+        {provider === "claude" && claudeTotalCost !== null && budgetLimitUsd !== null && claudeTotalCost > budgetLimitUsd && (
+          <div className="shrink-0 bg-red-900/40 border-b border-red-700/50 px-4 py-1.5 text-[10px] text-red-300 flex items-center gap-2">
+            <span>⚠</span>
+            <span>Lifetime spend ${claudeTotalCost.toFixed(2)} exceeds budget ${budgetLimitUsd.toFixed(2)}</span>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6 custom-scrollbar">
           {/* Top Section: Liquid Gauge & Key Stats */}
           <div className="flex items-center justify-between gap-4">
@@ -440,6 +449,8 @@ export function Dashboard() {
           onClose={closeSettings}
           themeColor={providerData.themeColor}
           onResetPreferences={resetPreferences}
+          budgetLimitUsd={budgetLimitUsd}
+          onSetBudgetLimit={setBudgetLimit}
         />
       </motion.div>
   );
