@@ -121,7 +121,7 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
                         return;
                       }
                       const parsed = parseFloat(raw);
-                      onSetBudgetLimit(isFinite(parsed) && parsed > 0 ? parsed : null);
+                      onSetBudgetLimit(isFinite(parsed) && parsed >= 0 ? parsed : null);
                     }}
                     className="w-full bg-[#001d3d]/40 border border-[#003566]/50 rounded-lg px-3 py-2 text-xs text-gray-300 font-mono focus:outline-none focus:border-[#003566]"
                   />

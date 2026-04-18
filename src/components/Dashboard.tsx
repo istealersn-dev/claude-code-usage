@@ -23,7 +23,7 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd, setBudgetLimit } = useAppStore(
+  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd } = useAppStore(
     useShallow((s) => ({
       provider: s.provider,
       setProvider: s.setProvider,
@@ -34,7 +34,6 @@ export function Dashboard() {
       closeSettings: s.closeSettings,
       resetPreferences: s.resetPreferences,
       budgetLimitUsd: s.budgetLimitUsd,
-      setBudgetLimit: s.setBudgetLimit,
     }))
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -450,7 +449,7 @@ export function Dashboard() {
           themeColor={providerData.themeColor}
           onResetPreferences={resetPreferences}
           budgetLimitUsd={budgetLimitUsd}
-          onSetBudgetLimit={setBudgetLimit}
+          onSetBudgetLimit={useAppStore.getState().setBudgetLimit}
         />
       </motion.div>
   );

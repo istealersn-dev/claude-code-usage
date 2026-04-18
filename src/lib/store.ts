@@ -61,7 +61,7 @@ export const useAppStore = create<AppState>()(
         const b = raw.budgetLimitUsd;
         const validBudget = (b === null || b === undefined)
           ? null
-          : (typeof b === "number" && isFinite(b) && b > 0 ? b : null);
+          : (typeof b === "number" && isFinite(b) && b >= 0 ? b : null);
         return {
           ...current,
           provider: isValidProvider(p) ? p : DEFAULT_PROVIDER,
