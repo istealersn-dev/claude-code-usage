@@ -18,6 +18,7 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
   const [liveTotalSessions, setLiveTotalSessions] = useState<number | null>(null);
   const [liveTotalTokens, setLiveTotalTokens] = useState<number | null>(null);
   const [liveModelDetails, setLiveModelDetails] = useState<ModelDetail[]>([]);
+  const [liveTotalCostUsd, setLiveTotalCostUsd] = useState<number | null>(null);
   const [claudeFetchState, setClaudeFetchState] = useState<"loading" | "done" | "error">(
     provider === "claude" ? "loading" : "done"
   );
@@ -30,6 +31,7 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
         if (result.totalSessions > 0) setLiveTotalSessions(result.totalSessions);
         if (result.totalTokens > 0) setLiveTotalTokens(result.totalTokens);
         if (result.modelDetails.length > 0) setLiveModelDetails(result.modelDetails);
+        if (result.totalCostUsd > 0) setLiveTotalCostUsd(result.totalCostUsd);
         setClaudeFetchState("done");
       })
       .catch(() => {
@@ -78,7 +80,9 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
             <div className="bg-[#001d3d]/20 border border-[#003566]/50 p-4 rounded-xl">
               <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Total Cost</p>
               <p className="text-2xl font-mono text-white">
-                {provider === "claude" ? "—" : `$${totalCost.toFixed(2)}`}
+                {provider === "claude"
+                  ? (liveTotalCostUsd !== null ? `$${liveTotalCostUsd.toFixed(2)}` : "—")
+                  : `$${totalCost.toFixed(2)}`}
               </p>
               <p className="text-[10px] text-emerald-400 mt-1">—</p>
             </div>
@@ -150,7 +154,7 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
                         <h4 className="text-base font-medium font-mono" style={{ color: providerData.themeColor }}>{model.name}</h4>
                         <span className="text-xs font-mono text-gray-400">{(model.totalTokens / 1_000_000).toFixed(1)}M total</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div className="grid grid-cols-4 gap-4 mb-4">
                         <div>
                           <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Input</p>
                           <p className="text-sm font-mono text-white">{(model.inputTokens / 1000).toFixed(0)}k</p>
@@ -162,6 +166,12 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
                         <div>
                           <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Cache</p>
                           <p className="text-sm font-mono text-white">{(model.cacheTokens / 1000).toFixed(0)}k</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Cost</p>
+                          <p className="text-sm font-mono" style={{ color: providerData.themeColor }}>
+                            {model.costUsd > 0 ? `$${model.costUsd.toFixed(4)}` : "—"}
+                          </p>
                         </div>
                       </div>
                       <div className="h-1.5 rounded-full overflow-hidden flex">
