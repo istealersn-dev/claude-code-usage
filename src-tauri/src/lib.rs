@@ -34,6 +34,9 @@ const FOCUS_SETTLE_MS: u128 = 800;
 /// `stats-cache.json` before emitting a single `claude-stats-updated` event.
 const STATS_WATCHER_DEBOUNCE_MS: u64 = 500;
 
+/// System-wide keyboard shortcut that toggles the main popup from any app.
+const GLOBAL_SHORTCUT: &str = "CmdOrCtrl+Shift+A";
+
 /// Returns the path to `~/.claude/stats-cache.json`, or `None` if `$HOME`
 /// is unset. Used by both the IPC command and the file-watcher task.
 fn claude_stats_path() -> Option<std::path::PathBuf> {
@@ -710,7 +713,7 @@ pub fn run() {
         // MacosLauncher::LaunchAgent is the modern per-user mechanism (no root).
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec![]),
+            None,
         ))
         // Global shortcut plugin: listens for system-wide hotkeys even when
         // the app has no focused window (needed since we run as Accessory).
@@ -904,7 +907,7 @@ pub fn run() {
             // a typo would surface as a setup error rather than a silent no-op.
             {
                 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-                let shortcut: Shortcut = "CmdOrCtrl+Shift+A"
+                let shortcut: Shortcut = GLOBAL_SHORTCUT
                     .parse()
                     .map_err(|e| format!("shortcut parse: {e}"))?;
                 app.global_shortcut()

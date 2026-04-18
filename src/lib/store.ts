@@ -52,7 +52,7 @@ export const useAppStore = create<AppState>()(
       closeSettings: () => set({ isSettingsOpen: false }),
       resetPreferences: () => {
         localStorage.removeItem("ai-pulse-store");
-        set({ provider: DEFAULT_PROVIDER, isSettingsOpen: false, budgetLimitUsd: null });
+        set({ provider: DEFAULT_PROVIDER, isSettingsOpen: false, budgetLimitUsd: null, autoLaunchEnabled: false });
       },
       budgetLimitUsd: null,
       setBudgetLimit: (limit) => set({ budgetLimitUsd: limit }),
@@ -61,18 +61,12 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "ai-pulse-store",
-      partialize: (state) => ({
-        provider: state.provider,
-        timeframe: state.timeframe,
-        budgetLimitUsd: state.budgetLimitUsd,
-        autoLaunchEnabled: state.autoLaunchEnabled,
-      }),
+      partialize: (state) => ({ provider: state.provider, timeframe: state.timeframe, budgetLimitUsd: state.budgetLimitUsd }),
       merge: (persisted, current) => {
         const raw = persisted as Partial<AppState>;
         const p = raw.provider;
         const t = raw.timeframe;
         const b = raw.budgetLimitUsd;
-        const a = raw.autoLaunchEnabled;
         const validBudget = (b === null || b === undefined)
           ? null
           : (typeof b === "number" && isFinite(b) && b >= 0 ? b : null);
@@ -81,7 +75,6 @@ export const useAppStore = create<AppState>()(
           provider: isValidProvider(p) ? p : DEFAULT_PROVIDER,
           timeframe: isValidTimeframe(t) ? t : DEFAULT_TIMEFRAME,
           budgetLimitUsd: validBudget,
-          autoLaunchEnabled: typeof a === "boolean" ? a : false,
         };
       },
     }

@@ -142,6 +142,7 @@ export function Dashboard() {
         .then(() => setAutoLaunchEnabled(enable))
         .catch((e: unknown) => {
           if (import.meta.env.DEV) console.warn("toggle_autolaunch failed:", e);
+          setError("Auto-launch toggle failed");
         });
     },
     [setAutoLaunchEnabled]
@@ -555,7 +556,10 @@ export function Dashboard() {
           isOpen={isSettingsOpen}
           onClose={closeSettings}
           themeColor={providerData.themeColor}
-          onResetPreferences={resetPreferences}
+          onResetPreferences={() => {
+            invoke<void>("toggle_autolaunch", { enable: false }).catch(() => {});
+            resetPreferences();
+          }}
           budgetLimitUsd={budgetLimitUsd}
           onSetBudgetLimit={useAppStore.getState().setBudgetLimit}
           autoLaunchEnabled={autoLaunchEnabled}
