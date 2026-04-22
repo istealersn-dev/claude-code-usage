@@ -903,14 +903,17 @@ pub fn run() {
             }
 
             // Register Cmd+Shift+A to toggle the main popup from anywhere.
-            // Uses `.parse()` so the shortcut string is validated at startup —
-            // a typo would surface as a setup error rather than a silent no-op.
+            // Failures are non-fatal — the tray icon click still works without it.
             {
                 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-                let shortcut: Shortcut = GLOBAL_SHORTCUT
-                    .parse()
-                    .map_err(|e| format!("shortcut parse: {e}"))?;
-                app.global_shortcut()
+                let shortcut: Shortcut = match GLOBAL_SHORTCUT.parse() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[ai-pulse] could not parse global shortcut {GLOBAL_SHORTCUT}: {e}");
+                        return Ok(());
+                    }
+                };
+                if let Err(e) = app.global_shortcut()
                     .on_shortcut(shortcut, move |app_handle, _shortcut, event| {
                         // Only act on key-down; ignoring key-up avoids toggling
                         // twice per press.
@@ -925,7 +928,9 @@ pub fn run() {
                             }
                         }
                     })
-                    .map_err(|e| format!("shortcut register: {e}"))?;
+                {
+                    eprintln!("[ai-pulse] could not register global shortcut {GLOBAL_SHORTCUT}: {e}");
+                }
             }
 
             // Watch ~/.claude/stats-cache.json for changes and emit an event

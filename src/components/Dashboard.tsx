@@ -142,6 +142,7 @@ export function Dashboard() {
         .then(() => setAutoLaunchEnabled(enable))
         .catch((e: unknown) => {
           if (import.meta.env.DEV) console.warn("toggle_autolaunch failed:", e);
+          setAutoLaunchEnabled(!enable);
           setError("Auto-launch toggle failed");
         });
     },
@@ -150,8 +151,8 @@ export function Dashboard() {
 
   const handleResetPreferences = useCallback(() => {
     invoke<void>("toggle_autolaunch", { enable: false })
-      .then(() => resetPreferences())
-      .catch(() => setError("Could not disable auto-launch before reset"));
+      .catch(() => {})
+      .then(() => resetPreferences());
   }, [resetPreferences]);
 
   // Fetch real Claude stats — setState only in async callbacks, never synchronously.
