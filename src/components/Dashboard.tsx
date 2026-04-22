@@ -4,10 +4,12 @@ import { LiquidGauge } from "./LiquidGauge";
 import { UsageChart } from "./UsageChart";
 import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats, onClaudeStatsUpdated } from "@/lib/claudeUsage";
+import { fetchCodexStats, onCodexStatsUpdated } from "@/lib/codexUsage";
 import { useAppStore, ALL_TIMEFRAMES } from "@/lib/store";
 import type { Timeframe } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult } from "@/lib/claudeUsage";
+import type { CodexUsageResult } from "@/lib/codexUsage";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -48,6 +50,11 @@ export function Dashboard() {
   const [claudeTotalCost, setClaudeTotalCost] = useState<number | null>(null);
   const [claudeTrendPct, setClaudeTrendPct] = useState<number | null>(null);
   const [claudeProjectedCost, setClaudeProjectedCost] = useState<number | null>(null);
+  // Codex equivalents — cost always null (Codex CLI does not log USD).
+  const [codexUsageData, setCodexUsageData] = useState<typeof providerData.usageData | null>(null);
+  const [realCodexModelUsage, setRealCodexModelUsage] = useState<typeof providerData.modelUsage | null>(null);
+  const [codexTotalCost, setCodexTotalCost] = useState<number | null>(null);
+  const [codexTrendPct, setCodexTrendPct] = useState<number | null>(null);
   // Non-Claude mock-refresh override, keyed by provider to avoid stale data across provider switches
   const [mockRefreshData, setMockRefreshData] = useState<{
     provider: Provider;
@@ -63,28 +70,54 @@ export function Dashboard() {
     setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
   }, []);
 
+  const applyCodexResult = useCallback((result: CodexUsageResult) => {
+    setCodexUsageData(result.usageData);
+    setRealCodexModelUsage(result.modelUsage);
+    setCodexTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
+    setCodexTrendPct(result.trendPct);
+  }, []);
+
   // Reset viewMode when provider changes — setState during render is the React-recommended
   // pattern for "derived state from props" and avoids synchronous setState inside effects.
   const [prevProvider, setPrevProvider] = useState<Provider>(provider);
   const [viewMode, setViewMode] = useState<"projects" | "models">("models");
+  const isRealDataProvider = provider === "claude" || provider === "codex";
+
   if (prevProvider !== provider) {
     setPrevProvider(provider);
-    setViewMode(provider === "claude" ? "models" : "projects");
+    // Claude + Codex expose models but no per-project data — default to models.
+    setViewMode(isRealDataProvider ? "models" : "projects");
   }
 
-  // Derived display values — no synchronous setState in effects needed
-  const usageData = provider === "claude"
-    ? (claudeUsageData ?? providerData.usageData)
-    : (mockRefreshData?.provider === provider ? mockRefreshData.usageData : providerData.usageData);
-  const contextUsage = provider !== "claude" && mockRefreshData?.provider === provider
+  // Derived display values — no synchronous setState in effects needed.
+  // Order of preference per provider:
+  //   claude → real fetched data, else mock
+  //   codex  → real fetched data, else mock
+  //   other  → mock-refresh data (keyed by provider), else mock
+  const usageData = (() => {
+    if (provider === "claude") return claudeUsageData ?? providerData.usageData;
+    if (provider === "codex") return codexUsageData ?? providerData.usageData;
+    return mockRefreshData?.provider === provider ? mockRefreshData.usageData : providerData.usageData;
+  })();
+  const contextUsage = provider !== "claude" && provider !== "codex" && mockRefreshData?.provider === provider
     ? mockRefreshData.contextUsage
     : providerData.currentUsage;
-  const displayModelUsage = (provider === "claude" ? realModelUsage : null) ?? providerData.modelUsage;
+  const displayModelUsage = (() => {
+    if (provider === "claude") return realModelUsage ?? providerData.modelUsage;
+    if (provider === "codex") return realCodexModelUsage ?? providerData.modelUsage;
+    return providerData.modelUsage;
+  })();
 
   const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
   const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
 
   const ProviderIcon = PROVIDER_ICONS[provider];
+
+  const getCostLabel = () => {
+    if (provider === "claude") return claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} lifetime` : "—";
+    if (provider === "codex") return codexTotalCost !== null ? `$${codexTotalCost.toFixed(2)} lifetime` : "—";
+    return `$${totalCost.toFixed(2)} this month`;
+  };
 
   // Keep ref in sync so async callbacks can check the current provider
   useEffect(() => { providerRef.current = provider; }, [provider]);
@@ -116,6 +149,32 @@ export function Dashboard() {
     };
   }, [provider, applyClaudeResult, timeframe, isRefreshing]);
 
+  // Fetch real Codex stats + subscribe to the Rust-side recursive watcher on
+  // ~/.codex/sessions so new rollout lines auto-refresh the dashboard.
+  useEffect(() => {
+    if (provider !== "codex" || isRefreshing) return;
+    let cancelled = false;
+    fetchCodexStats(timeframe)
+      .then((result) => {
+        if (cancelled) return;
+        applyCodexResult(result);
+      })
+      .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("codex sessions fallback:", e); });
+    const unlistenPromise = onCodexStatsUpdated(() => {
+      if (cancelled) return;
+      fetchCodexStats(timeframe)
+        .then((result) => {
+          if (cancelled) return;
+          applyCodexResult(result);
+        })
+        .catch((e: unknown) => { if (import.meta.env.DEV) console.warn("codex watcher fallback:", e); });
+    });
+    return () => {
+      cancelled = true;
+      unlistenPromise.then((fn) => fn()).catch(() => {});
+    };
+  }, [provider, applyCodexResult, timeframe, isRefreshing]);
+
   const handleRefresh = () => {
     if (isRefreshing) return;
 
@@ -128,6 +187,18 @@ export function Dashboard() {
         .then((result) => {
           if (providerRef.current !== "claude") return;
           applyClaudeResult(result);
+          setIsRefreshing(false);
+        })
+        .catch(() => {
+          setError("Update failed");
+          setIsRefreshing(false);
+        });
+    } else if (provider === "codex") {
+      // Re-parse ~/.codex/sessions/*.jsonl
+      fetchCodexStats(timeframe)
+        .then((result) => {
+          if (providerRef.current !== "codex") return;
+          applyCodexResult(result);
           setIsRefreshing(false);
         })
         .catch(() => {
@@ -204,9 +275,7 @@ export function Dashboard() {
                       exit={{ opacity: 0, y: 10 }}
                       className="text-[10px] sm:text-xs text-gray-400 font-mono"
                     >
-                      {provider === "claude"
-                        ? (claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} lifetime` : "—")
-                        : `$${totalCost.toFixed(2)} this month`}
+                      {getCostLabel()}
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -229,7 +298,7 @@ export function Dashboard() {
                 </div>
             </div>
           </div>
-          {provider === "claude" && (
+          {isRealDataProvider && (
             <div className="px-3 sm:px-4 pb-2 flex items-center gap-1">
               {ALL_TIMEFRAMES.map((t) => (
                 <button
@@ -279,17 +348,27 @@ export function Dashboard() {
                    <span className="text-[10px] uppercase font-bold">Trend</span>
                  </div>
                  <p className="text-[10px] sm:text-xs text-gray-300 leading-tight">
-                   {provider === "claude" && claudeTrendPct !== null ? (
-                     <>
-                       Usage{" "}
-                       <span className="font-bold" style={{ color: providerData.themeColor }}>
-                         {claudeTrendPct >= 0 ? "+" : ""}{claudeTrendPct.toFixed(1)}%
-                       </span>{" "}
-                       vs last week.
-                     </>
-                   ) : (
-                     <>Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>—</span> from last week.</>
-                   )}
+                   {(() => {
+                     const trend = provider === "claude"
+                       ? claudeTrendPct
+                       : provider === "codex"
+                         ? codexTrendPct
+                         : null;
+                     if (trend === null) {
+                       return (
+                         <>Usage up <span className="font-bold" style={{ color: providerData.themeColor }}>—</span> from last week.</>
+                       );
+                     }
+                     return (
+                       <>
+                         Usage{" "}
+                         <span className="font-bold" style={{ color: providerData.themeColor }}>
+                           {trend >= 0 ? "+" : ""}{trend.toFixed(1)}%
+                         </span>{" "}
+                         vs last week.
+                       </>
+                     );
+                   })()}
                  </p>
                </div>
 
@@ -314,7 +393,7 @@ export function Dashboard() {
           {/* Chart Section */}
           <div>
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> {provider === "claude" ? `${timeframe} Token Trend` : "Token Trend"}
+              <TrendingUp className="w-3 h-3" /> {isRealDataProvider ? `${timeframe} Token Trend` : "Token Trend"}
             </h3>
             <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
               <UsageChart data={usageData} color={providerData.themeColor} />
@@ -366,6 +445,10 @@ export function Dashboard() {
                     {provider === "claude" ? (
                       <p className="text-[10px] text-gray-500 text-center py-4 px-2 leading-relaxed">
                         Project breakdown is not available — Claude Code does not expose per-project usage in stats-cache.json
+                      </p>
+                    ) : provider === "codex" ? (
+                      <p className="text-[10px] text-gray-500 text-center py-4 px-2 leading-relaxed">
+                        Project breakdown is not available — Codex session files do not record a project identifier
                       </p>
                     ) : (
                       providerData.projectUsage.map((project) => (

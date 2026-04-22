@@ -6,6 +6,9 @@ import { DEFAULT_TIMEFRAME, TIMEFRAME_DAYS } from "./store";
 import type { Timeframe } from "./store";
 
 // ── Zod schemas for IPC boundary validation ───────────────────────────────────
+// Codex returns the same `ClaudeStats` shape from the Rust side — cost_usd is
+// always 0.0 and projected_monthly_cost_usd is always null because the Codex
+// CLI does not log USD cost.
 
 const RawDailyUsageSchema = z.object({
   date: z.string(),
@@ -22,7 +25,7 @@ const RawModelStatSchema = z.object({
   cost_usd: z.number(),
 });
 
-const RawClaudeStatsSchema = z.object({
+const RawCodexStatsSchema = z.object({
   daily_usage: z.array(RawDailyUsageSchema),
   model_stats: z.array(RawModelStatSchema),
   total_sessions: z.number(),
@@ -33,7 +36,7 @@ const RawClaudeStatsSchema = z.object({
 
 // ── Mapped result ─────────────────────────────────────────────────────────────
 
-export interface ModelDetail {
+export interface CodexModelDetail {
   name: string;
   inputTokens: number;
   outputTokens: number;
@@ -42,10 +45,10 @@ export interface ModelDetail {
   costUsd: number;
 }
 
-export interface ClaudeUsageResult {
+export interface CodexUsageResult {
   usageData: UsageData[];
   modelUsage: ModelUsage[];
-  modelDetails: ModelDetail[];
+  modelDetails: CodexModelDetail[];
   totalTokens: number;
   totalSessions: number;
   totalCostUsd: number;
@@ -53,10 +56,10 @@ export interface ClaudeUsageResult {
   projectedMonthlyCostUsd: number | null;
 }
 
-export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME): Promise<ClaudeUsageResult> {
+export async function fetchCodexStats(timeframe: Timeframe = DEFAULT_TIMEFRAME): Promise<CodexUsageResult> {
   const days = TIMEFRAME_DAYS[timeframe];
-  const payload = await invoke("get_claude_stats", { days });
-  const parsed = RawClaudeStatsSchema.safeParse(payload);
+  const payload = await invoke("get_codex_stats", { days });
+  const parsed = RawCodexStatsSchema.safeParse(payload);
   if (!parsed.success) {
     throw new Error(`IPC schema mismatch — check Rust/TS field alignment: ${parsed.error.message}`);
   }
@@ -71,7 +74,7 @@ export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME)
 
   let totalTokens = 0;
   const modelUsage: ModelUsage[] = [];
-  const modelDetails: ModelDetail[] = [];
+  const modelDetails: CodexModelDetail[] = [];
 
   for (const m of raw.model_stats) {
     const total = m.input_tokens + m.output_tokens + m.cache_tokens;
@@ -99,6 +102,6 @@ export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME)
   };
 }
 
-export async function onClaudeStatsUpdated(onUpdate: () => void): Promise<() => void> {
-  return listen<void>("claude-stats-updated", () => onUpdate());
+export async function onCodexStatsUpdated(onUpdate: () => void): Promise<() => void> {
+  return listen<void>("codex-stats-updated", () => onUpdate());
 }
