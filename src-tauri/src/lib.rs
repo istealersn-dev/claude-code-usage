@@ -329,7 +329,12 @@ fn codex_date_from_timestamp(ts: &str) -> Option<String> {
     if ts.len() >= 10 {
         let candidate = &ts[..10];
         let bytes = candidate.as_bytes();
-        if bytes[4] == b'-' && bytes[7] == b'-' {
+        if bytes[4] == b'-'
+            && bytes[7] == b'-'
+            && bytes[..4].iter().all(u8::is_ascii_digit)
+            && bytes[5..7].iter().all(u8::is_ascii_digit)
+            && bytes[8..10].iter().all(u8::is_ascii_digit)
+        {
             return Some(candidate.to_string());
         }
     }
@@ -812,9 +817,7 @@ pub fn run() {
             // rollout-*.jsonl writes from active Codex CLI sessions and emit
             // "codex-stats-updated" so the frontend re-fetches live.
             if let Some(codex_watch_path) = codex_sessions_path() {
-                // Ensure the directory exists so the watcher can be registered
-                // even when Codex CLI is installed after AI Pulse is already running.
-                let _ = std::fs::create_dir_all(&codex_watch_path);
+                if codex_watch_path.exists() {
                 {
                     let app_handle = app.handle().clone();
                     tauri::async_runtime::spawn(async move {
@@ -850,6 +853,7 @@ pub fn run() {
                         }
                     });
                 } // end inner scope (app_handle borrow)
+                } // end if codex_watch_path.exists()
             }
 
             // Watch ~/.claude/stats-cache.json for changes and emit an event

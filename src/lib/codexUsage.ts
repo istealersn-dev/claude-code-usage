@@ -2,8 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { z } from "zod";
 import type { UsageData, ModelUsage } from "./data";
+import { DEFAULT_TIMEFRAME, TIMEFRAME_DAYS } from "./store";
 import type { Timeframe } from "./store";
-import { DEFAULT_TIMEFRAME } from "./store";
 
 // ── Zod schemas for IPC boundary validation ───────────────────────────────────
 // Codex returns the same `ClaudeStats` shape from the Rust side — cost_usd is
@@ -33,10 +33,6 @@ const RawCodexStatsSchema = z.object({
   trend_pct: z.number().nullable(),
   projected_monthly_cost_usd: z.number().nullable(),
 });
-
-const TIMEFRAME_DAYS: Record<Timeframe, number> = {
-  "1d": 1, "3d": 3, "7d": 7, "30d": 30,
-};
 
 // ── Mapped result ─────────────────────────────────────────────────────────────
 

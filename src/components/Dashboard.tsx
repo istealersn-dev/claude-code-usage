@@ -63,8 +63,8 @@ export function Dashboard() {
   } | null>(null);
 
   const applyClaudeResult = useCallback((result: ClaudeUsageResult) => {
-    setClaudeUsageData(result.usageData);
-    setRealModelUsage(result.modelUsage);
+    if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
+    if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
     setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
     setClaudeTrendPct(result.trendPct);
     setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
@@ -112,6 +112,12 @@ export function Dashboard() {
   const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
 
   const ProviderIcon = PROVIDER_ICONS[provider];
+
+  const getCostLabel = () => {
+    if (provider === "claude") return claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} lifetime` : "—";
+    if (provider === "codex") return codexTotalCost !== null ? `$${codexTotalCost.toFixed(2)} lifetime` : "—";
+    return `$${totalCost.toFixed(2)} this month`;
+  };
 
   // Keep ref in sync so async callbacks can check the current provider
   useEffect(() => { providerRef.current = provider; }, [provider]);
@@ -269,11 +275,7 @@ export function Dashboard() {
                       exit={{ opacity: 0, y: 10 }}
                       className="text-[10px] sm:text-xs text-gray-400 font-mono"
                     >
-                      {provider === "claude"
-                        ? (claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} lifetime` : "—")
-                        : provider === "codex"
-                          ? (codexTotalCost !== null ? `$${codexTotalCost.toFixed(2)} lifetime` : "—")
-                          : `$${totalCost.toFixed(2)} this month`}
+                      {getCostLabel()}
                     </motion.span>
                   )}
                 </AnimatePresence>
