@@ -24,9 +24,11 @@ interface SettingsModalProps {
   onResetPreferences: () => void;
   budgetLimitUsd: number | null;
   onSetBudgetLimit: (limit: number | null) => void;
+  autoLaunchEnabled: boolean;
+  onToggleAutoLaunch: (enabled: boolean) => void;
 }
 
-export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences, budgetLimitUsd, onSetBudgetLimit }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences, budgetLimitUsd, onSetBudgetLimit, autoLaunchEnabled, onToggleAutoLaunch }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api-keys");
 
   useEffect(() => {
@@ -132,6 +134,25 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
 
             {activeTab === "appearance" && (
               <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Launch at login</span>
+                  <button
+                    onClick={() => onToggleAutoLaunch(!autoLaunchEnabled)}
+                    className={cn(
+                      "w-10 h-5 rounded-full transition-colors relative",
+                      autoLaunchEnabled ? "bg-[color:var(--theme-color,#ffd60a)]" : "bg-gray-600"
+                    )}
+                    aria-pressed={autoLaunchEnabled}
+                    aria-label="Toggle launch at login"
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                        autoLaunchEnabled ? "translate-x-5" : "translate-x-0.5"
+                      )}
+                    />
+                  </button>
+                </div>
                 <p className="text-[10px] text-gray-400">Theme customization coming in a future release.</p>
               </div>
             )}

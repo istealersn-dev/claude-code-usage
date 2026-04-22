@@ -6,6 +6,10 @@
   "permissions": [
     "core:default",
     "core:webview:allow-create-webview-window",
-    "core:event:allow-listen"
+    "core:event:allow-listen",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "global-shortcut:allow-register"
   ]
 }

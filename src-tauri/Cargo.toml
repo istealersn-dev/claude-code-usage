@@ -21,6 +21,8 @@ objc2 = "0.6.4"
 window-vibrancy = "0.6"
 # macos_kqueue: lighter than FSEvents for single-file watching; no recursive directory scan needed
 notify = { version = "6", features = ["macos_kqueue"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-global-shortcut = "2"
 
 [profile.release]
 codegen-units = 1

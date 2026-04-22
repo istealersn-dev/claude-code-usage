@@ -34,6 +34,9 @@ const FOCUS_SETTLE_MS: u128 = 800;
 /// `stats-cache.json` before emitting a single `claude-stats-updated` event.
 const STATS_WATCHER_DEBOUNCE_MS: u64 = 500;
 
+/// System-wide keyboard shortcut that toggles the main popup from any app.
+const GLOBAL_SHORTCUT: &str = "CmdOrCtrl+Shift+A";
+
 /// Returns the path to `~/.claude/stats-cache.json`, or `None` if `$HOME`
 /// is unset. Used by both the IPC command and the file-watcher task.
 fn claude_stats_path() -> Option<std::path::PathBuf> {
@@ -641,6 +644,35 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
     })
 }
 
+// ── Auto-launch IPC commands ──────────────────────────────────────────────────
+
+/// Enables or disables the "launch at login" LaunchAgent for AI Pulse.
+///
+/// Delegates to the `tauri-plugin-autostart` plugin, which on macOS installs a
+/// `LaunchAgent` plist under `~/Library/LaunchAgents/`. The agent starts the
+/// app on user login; disabling removes the plist.
+///
+/// Returns an error string if the underlying plugin call fails (e.g. file-
+/// system write failure). The frontend logs this to the console in DEV.
+#[tauri::command]
+fn toggle_autolaunch(app: tauri::AppHandle, enable: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    if enable {
+        app.autolaunch().enable().map_err(|e| e.to_string())
+    } else {
+        app.autolaunch().disable().map_err(|e| e.to_string())
+    }
+}
+
+/// Returns true if the "launch at login" LaunchAgent is currently registered
+/// for AI Pulse. Used on frontend mount to sync the Zustand toggle state with
+/// the actual OS state.
+#[tauri::command]
+fn is_autolaunch_enabled(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
 /// Converts "2026-03-06" → "Mar 06" for chart axis labels.
 fn format_date_label(date: &str) -> String {
     let months = [
@@ -677,7 +709,21 @@ pub fn run() {
     let pending_show: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_claude_stats, get_codex_stats])
+        // Autostart plugin: installs/removes a macOS LaunchAgent when toggled.
+        // MacosLauncher::LaunchAgent is the modern per-user mechanism (no root).
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        // Global shortcut plugin: listens for system-wide hotkeys even when
+        // the app has no focused window (needed since we run as Accessory).
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            get_claude_stats,
+            get_codex_stats,
+            toggle_autolaunch,
+            is_autolaunch_enabled
+        ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -854,6 +900,37 @@ pub fn run() {
                     });
                 } // end inner scope (app_handle borrow)
                 } // end if codex_watch_path.exists()
+            }
+
+            // Register Cmd+Shift+A to toggle the main popup from anywhere.
+            // Failures are non-fatal — the tray icon click still works without it.
+            {
+                use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+                let shortcut: Shortcut = match GLOBAL_SHORTCUT.parse() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[ai-pulse] could not parse global shortcut {GLOBAL_SHORTCUT}: {e}");
+                        return Ok(());
+                    }
+                };
+                if let Err(e) = app.global_shortcut()
+                    .on_shortcut(shortcut, move |app_handle, _shortcut, event| {
+                        // Only act on key-down; ignoring key-up avoids toggling
+                        // twice per press.
+                        if event.state == ShortcutState::Pressed {
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                    })
+                {
+                    eprintln!("[ai-pulse] could not register global shortcut {GLOBAL_SHORTCUT}: {e}");
+                }
             }
 
             // Watch ~/.claude/stats-cache.json for changes and emit an event
