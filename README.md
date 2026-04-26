@@ -172,4 +172,20 @@ Output is in `src-tauri/target/release/bundle/`:
 
 ## License
 
-MIT
+MIT © [Stanley J](https://github.com/istealersn-dev)
+
+AI Pulse is open source under the [MIT License](LICENSE) — free for personal and commercial use.
+
+**When using or distributing this software:**
+- Include the original copyright notice and license
+- Do not rebrand or claim the AI Pulse name/identity as your own
+
+No fees, royalties, or prior approval needed. See [LICENSE](LICENSE) for the full text.
+
+---
+
+## Support the project
+
+If AI Pulse saves you time or gives you useful insight into your AI usage, a GitHub star goes a long way — it helps others find the project.
+
+**[⭐ Star AI Pulse on GitHub](https://github.com/istealersn-dev/ai-pulse)**
