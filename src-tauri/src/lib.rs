@@ -245,6 +245,53 @@ pub struct ProjectStat {
     tokens: u64,
 }
 
+/// Returns the context window size (`input` + `cache_read` + `cache_write`) of the most
+/// recent assistant message across all session JSONL files in `~/.claude/projects/`.
+/// Finds the file with the newest mtime, scans it, and returns the last usage entry.
+fn current_context_tokens() -> u64 {
+    let Some(root) = claude_projects_path() else { return 0 };
+    let Ok(project_dirs) = std::fs::read_dir(&root) else { return 0 };
+
+    // Find the JSONL file with the most recent modification time.
+    let mut newest_mtime = std::time::UNIX_EPOCH;
+    let mut newest_path: Option<std::path::PathBuf> = None;
+
+    for proj_entry in project_dirs.flatten() {
+        let Ok(ft) = proj_entry.file_type() else { continue };
+        if !ft.is_dir() { continue; }
+        let Ok(files) = std::fs::read_dir(proj_entry.path()) else { continue };
+        for file_entry in files.flatten() {
+            let path = file_entry.path();
+            let fname = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+            if !std::path::Path::new(fname).extension().is_some_and(|e| e.eq_ignore_ascii_case("jsonl")) {
+                continue;
+            }
+            let Ok(meta) = path.metadata() else { continue };
+            let Ok(mtime) = meta.modified() else { continue };
+            if mtime > newest_mtime {
+                newest_mtime = mtime;
+                newest_path = Some(path);
+            }
+        }
+    }
+
+    let Some(path) = newest_path else { return 0 };
+    let Ok(content) = std::fs::read_to_string(&path) else { return 0 };
+
+    // Walk the file and keep the last usage we encounter.
+    let mut last_ctx: u64 = 0;
+    for line in content.lines() {
+        if line.is_empty() { continue; }
+        let Ok(msg) = serde_json::from_str::<SessionLine>(line) else { continue };
+        if msg.kind != "assistant" { continue; }
+        let Some(usage) = msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) else { continue };
+        last_ctx = usage.input_tokens
+            + usage.cache_read_input_tokens
+            + usage.cache_creation_input_tokens;
+    }
+    last_ctx
+}
+
 /// Scans `~/.claude/projects/` and aggregates per-project input+output token totals
 /// across all session JSONL files whose mtime falls within the last `days` days.
 /// Skips temp/worktree directories (those not rooted in `$HOME`).
@@ -398,6 +445,10 @@ pub struct ProviderStats {
     projected_monthly_cost_usd: Option<f64>,
     /// Per-project token totals for the requested window, sorted by tokens descending.
     project_stats: Vec<ProjectStat>,
+    /// Tokens in the active context window from the most recent assistant message
+    /// (`input + cache_read + cache_write`). Used to drive the context gauge.
+    /// Zero when no session data is available.
+    current_context_tokens: u64,
 }
 
 // ── Shared stat helpers ───────────────────────────────────────────────────────
@@ -607,6 +658,7 @@ fn get_claude_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     sort_model_stats_by_tokens(&mut model_stats);
 
     let project_stats = aggregate_claude_projects(days.unwrap_or(30));
+    let current_context_tokens = current_context_tokens();
 
     Ok(ProviderStats {
         daily_usage: entries,
@@ -616,6 +668,7 @@ fn get_claude_stats(days: Option<u32>) -> Result<ProviderStats, String> {
         total_cost_usd,
         trend_pct,
         projected_monthly_cost_usd,
+        current_context_tokens,
     })
 }
 
@@ -811,6 +864,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
             total_cost_usd: 0.0,
             trend_pct: None,
             projected_monthly_cost_usd: None,
+            current_context_tokens: 0,
         });
     }
 
@@ -959,6 +1013,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
         total_cost_usd: 0.0,
         trend_pct,
         projected_monthly_cost_usd: None,
+        current_context_tokens: 0,
     })
 }
 

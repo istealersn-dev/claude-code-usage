@@ -89,6 +89,7 @@ export function Dashboard() {
   const [claudeTotalCost, setClaudeTotalCost] = useState<number | null>(null);
   const [claudeTrendPct, setClaudeTrendPct] = useState<number | null>(null);
   const [claudeProjectedCost, setClaudeProjectedCost] = useState<number | null>(null);
+  const [claudeContextTokens, setClaudeContextTokens] = useState<number | null>(null);
   // Codex equivalents — cost always null (Codex CLI does not log USD).
   const [codexUsageData, setCodexUsageData] = useState<typeof providerData.usageData | null>(null);
   const [realCodexModelUsage, setRealCodexModelUsage] = useState<typeof providerData.modelUsage | null>(null);
@@ -108,6 +109,7 @@ export function Dashboard() {
     setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
     setClaudeTrendPct(result.trendPct);
     setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
+    if (result.currentContextTokens > 0) setClaudeContextTokens(result.currentContextTokens);
   }, []);
 
   const applyCodexResult = useCallback((result: CodexUsageResult) => {
@@ -139,13 +141,11 @@ export function Dashboard() {
     if (provider === "codex") return codexUsageData ?? providerData.usageData;
     return mockRefreshData?.provider === provider ? mockRefreshData.usageData : providerData.usageData;
   })();
-  // For real providers drive the gauge from the most recent day's token burn
-  // so it reflects actual usage rather than a hardcoded constant.
+  // Context window usage: tokens currently in the active context / provider limit.
+  // For Claude: sourced from the most recent assistant message in the active session.
+  // For others: falls back to mock currentUsage / contextLimit.
   const contextUsage = (() => {
-    if (provider === "claude" || provider === "codex") {
-      const last = usageData[usageData.length - 1];
-      return last ? last.inputTokens + last.outputTokens + last.cacheTokens : 0;
-    }
+    if (provider === "claude") return claudeContextTokens ?? 0;
     return mockRefreshData?.provider === provider
       ? mockRefreshData.contextUsage
       : providerData.currentUsage;
@@ -157,15 +157,7 @@ export function Dashboard() {
     return providerData.modelUsage;
   })();
 
-  const contextPercentage = (() => {
-    if (isRealDataProvider) {
-      // For real providers, show today relative to the peak day in the current
-      // period — 100% = your busiest day, keeps the gauge meaningful and bounded.
-      const peakDay = Math.max(...usageData.map(d => d.inputTokens + d.outputTokens + d.cacheTokens), 1);
-      return Math.min((contextUsage / peakDay) * 100, 100);
-    }
-    return Math.min((contextUsage / providerData.contextLimit) * 100, 100);
-  })();
+  const contextPercentage = Math.min((contextUsage / providerData.contextLimit) * 100, 100);
 
   const ProviderIcon = PROVIDER_ICONS[provider];
 
@@ -440,13 +432,11 @@ export function Dashboard() {
                   <LiquidGauge percentage={contextPercentage} isError={!!error} color={providerData.themeColor} darkColor={providerData.themeDark} />
                </div>
                <div className="mt-2 text-center">
-                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">
-                   {isRealDataProvider ? "Today's Tokens" : "Context Limit"}
-                 </p>
+                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Context Window</p>
                  <p className="text-xs font-mono text-white">
-                   {isRealDataProvider
-                     ? formatTokenCount(contextUsage)
-                     : `${(contextUsage / 1000).toFixed(0)}k / ${(providerData.contextLimit / 1000).toFixed(0)}k`}
+                   {contextUsage > 0
+                     ? `${formatTokenCount(contextUsage)} / ${formatTokenCount(providerData.contextLimit)}`
+                     : `— / ${formatTokenCount(providerData.contextLimit)}`}
                  </p>
                </div>
             </div>

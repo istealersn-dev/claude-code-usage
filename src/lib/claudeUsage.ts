@@ -14,6 +14,7 @@ const RawClaudeStatsSchema = z.object({
   total_cost_usd: z.number(),
   trend_pct: z.number().nullable(),
   projected_monthly_cost_usd: z.number().nullable(),
+  current_context_tokens: z.number(),
 });
 
 // ── Mapped result ─────────────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ export interface ClaudeUsageResult {
   totalCostUsd: number;
   trendPct: number | null;
   projectedMonthlyCostUsd: number | null;
+  currentContextTokens: number;
 }
 
 export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME): Promise<ClaudeUsageResult> {
@@ -68,6 +70,7 @@ export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME)
     totalCostUsd: raw.total_cost_usd,
     trendPct: raw.trend_pct,
     projectedMonthlyCostUsd: raw.projected_monthly_cost_usd,
+    currentContextTokens: raw.current_context_tokens,
   };
 }
 
