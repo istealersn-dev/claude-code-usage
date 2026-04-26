@@ -93,7 +93,6 @@ export function Dashboard() {
   // Codex equivalents — cost always null (Codex CLI does not log USD).
   const [codexUsageData, setCodexUsageData] = useState<typeof providerData.usageData | null>(null);
   const [realCodexModelUsage, setRealCodexModelUsage] = useState<typeof providerData.modelUsage | null>(null);
-  const [codexTotalCost, setCodexTotalCost] = useState<number | null>(null);
   const [codexTrendPct, setCodexTrendPct] = useState<number | null>(null);
   // Non-Claude mock-refresh override, keyed by provider to avoid stale data across provider switches
   const [mockRefreshData, setMockRefreshData] = useState<{
@@ -115,7 +114,6 @@ export function Dashboard() {
   const applyCodexResult = useCallback((result: CodexUsageResult) => {
     setCodexUsageData(result.usageData);
     setRealCodexModelUsage(result.modelUsage);
-    setCodexTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
     setCodexTrendPct(result.trendPct);
   }, []);
 
@@ -161,12 +159,6 @@ export function Dashboard() {
 
   const ProviderIcon = PROVIDER_ICONS[provider];
 
-  const getCostLabel = () => {
-    if (provider === "claude") return claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} lifetime` : "—";
-    if (provider === "codex") return codexTotalCost !== null ? `$${codexTotalCost.toFixed(2)} lifetime` : "—";
-    const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
-    return `$${totalCost.toFixed(2)} this month`;
-  };
 
   // Keep ref in sync so async callbacks can check the current provider
   useEffect(() => { providerRef.current = provider; }, [provider]);
@@ -354,7 +346,7 @@ export function Dashboard() {
             </div>
             <div className="flex items-center gap-3">
               <AnimatePresence mode="wait">
-                {error ? (
+                {error && (
                   <motion.span
                     key="error"
                     initial={{ opacity: 0, y: -10 }}
@@ -363,16 +355,6 @@ export function Dashboard() {
                     className="text-[10px] sm:text-xs text-red-400 font-mono"
                   >
                     {error}
-                  </motion.span>
-                ) : (
-                  <motion.span
-                    key="cost"
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="text-[10px] sm:text-xs text-gray-400 font-mono"
-                  >
-                    {getCostLabel()}
                   </motion.span>
                 )}
               </AnimatePresence>
