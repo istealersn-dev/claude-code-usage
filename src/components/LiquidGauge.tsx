@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,9 @@ interface LiquidGaugeProps {
 }
 
 export function LiquidGauge({ percentage, className, isError = false, color = "#ffd60a", darkColor = "#ffc300" }: LiquidGaugeProps) {
+  const uid = useId();
+  const gradId = `${uid}-lg`;
+  const clipId = `${uid}-bc`;
   const clampedPercentage = Math.min(Math.max(percentage, 0), 100);
   
   // The height of the bottle fill area is roughly 140 units (from y=150 to y=10)
@@ -26,12 +30,12 @@ export function LiquidGauge({ percentage, className, isError = false, color = "#
         style={{ filter: "drop-shadow(0 0 15px rgba(0, 53, 102, 0.4))" }}
       >
         <defs>
-          <linearGradient id="liquidGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={isError ? "#ef4444" : color} />
             <stop offset="100%" stopColor={isError ? "#b91c1c" : darkColor} />
           </linearGradient>
           
-          <clipPath id="bottleClip">
+          <clipPath id={clipId}>
              <path d="M20,10 L80,10 C85,10 90,15 90,20 L90,140 C90,150 82,158 72,158 L28,158 C18,158 10,150 10,140 L10,20 C10,15 15,10 20,10 Z" />
           </clipPath>
         </defs>
@@ -45,10 +49,10 @@ export function LiquidGauge({ percentage, className, isError = false, color = "#
         />
 
         {/* Liquid Group */}
-        <g clipPath="url(#bottleClip)">
+        <g clipPath={`url(#${clipId})`}>
           {/* Back Wave */}
           <motion.path
-            fill="url(#liquidGradient)"
+            fill={`url(#${gradId})`}
             fillOpacity="0.6"
             d="M -200 0 Q -175 12 -150 0 T -100 0 Q -75 12 -50 0 T 0 0 Q 25 12 50 0 T 100 0 Q 125 12 150 0 T 200 0 Q 225 12 250 0 T 300 0 V 200 H -200 Z"
             animate={{ x: [-100, 0] }}
@@ -59,7 +63,7 @@ export function LiquidGauge({ percentage, className, isError = false, color = "#
 
           {/* Front Wave */}
           <motion.path
-            fill="url(#liquidGradient)"
+            fill={`url(#${gradId})`}
             d="M -200 0 Q -175 15 -150 0 T -100 0 Q -75 15 -50 0 T 0 0 Q 25 15 50 0 T 100 0 Q 125 15 150 0 T 200 0 Q 225 15 250 0 T 300 0 V 200 H -200 Z"
             animate={{ x: [-100, 0] }}
             transition={{ repeat: Infinity, duration: 3, ease: "linear" }}

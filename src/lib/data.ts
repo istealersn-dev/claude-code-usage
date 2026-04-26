@@ -23,15 +23,6 @@ export interface ModelUsage {
   cost: number;
 }
 
-export interface DetailedProjectAnalytics {
-  name: string;
-  sessions: number;
-  toolsUsed: { name: string; count: number }[];
-  pluginsUsed: { name: string; count: number }[];
-  mcpUsage: { name: string; requests: number }[];
-  skillsUsage: { name: string; count: number }[];
-}
-
 export interface ProviderData {
   name: string;
   themeColor: string;
@@ -41,7 +32,6 @@ export interface ProviderData {
   usageData: UsageData[];
   projectUsage: ProjectUsage[];
   modelUsage: ModelUsage[];
-  detailedAnalytics: DetailedProjectAnalytics[];
 }
 
 const claudeData: ProviderData = {
@@ -68,71 +58,6 @@ const claudeData: ProviderData = {
     { name: "claude-3-5-sonnet", tokens: 2100000, cost: 8.50 },
     { name: "claude-3-haiku", tokens: 450000, cost: 1.00 },
   ],
-  detailedAnalytics: [
-    {
-      name: "e-commerce-platform",
-      sessions: 42,
-      toolsUsed: [
-        { name: "Code Generation", count: 156 },
-        { name: "Refactoring", count: 89 },
-        { name: "Debugging", count: 45 },
-      ],
-      pluginsUsed: [
-        { name: "React Snippets", count: 120 },
-        { name: "Tailwind CSS", count: 85 },
-      ],
-      mcpUsage: [
-        { name: "Database Schema", requests: 34 },
-        { name: "API Docs", requests: 56 },
-      ],
-      skillsUsage: [
-        { name: "TypeScript", count: 210 },
-        { name: "React", count: 180 },
-        { name: "Node.js", count: 95 },
-      ],
-    },
-    {
-      name: "mobile-app-v2",
-      sessions: 28,
-      toolsUsed: [
-        { name: "Code Generation", count: 98 },
-        { name: "UI Components", count: 76 },
-        { name: "Testing", count: 32 },
-      ],
-      pluginsUsed: [
-        { name: "React Native", count: 145 },
-        { name: "Expo Tools", count: 67 },
-      ],
-      mcpUsage: [
-        { name: "Design System", requests: 45 },
-        { name: "API Docs", requests: 23 },
-      ],
-      skillsUsage: [
-        { name: "React Native", count: 160 },
-        { name: "TypeScript", count: 140 },
-        { name: "Jest", count: 45 },
-      ],
-    },
-    {
-      name: "internal-tools",
-      sessions: 15,
-      toolsUsed: [
-        { name: "Scripting", count: 65 },
-        { name: "Data Processing", count: 43 },
-      ],
-      pluginsUsed: [
-        { name: "Python Tools", count: 88 },
-      ],
-      mcpUsage: [
-        { name: "Internal Wiki", requests: 78 },
-      ],
-      skillsUsage: [
-        { name: "Python", count: 120 },
-        { name: "SQL", count: 85 },
-        { name: "Bash", count: 30 },
-      ],
-    }
-  ]
 };
 
 const codexData: ProviderData = {
@@ -158,40 +83,6 @@ const codexData: ProviderData = {
     { name: "gpt-4o", tokens: 1100000, cost: 4.20 },
     { name: "gpt-4-turbo", tokens: 200000, cost: 0.50 },
   ],
-  detailedAnalytics: [
-    {
-      name: "e-commerce-platform",
-      sessions: 35,
-      toolsUsed: [
-        { name: "Code Generation", count: 120 },
-        { name: "Refactoring", count: 60 },
-      ],
-      pluginsUsed: [
-        { name: "Copilot Chat", count: 150 },
-      ],
-      mcpUsage: [],
-      skillsUsage: [
-        { name: "TypeScript", count: 180 },
-        { name: "React", count: 150 },
-      ],
-    },
-    {
-      name: "legacy-api",
-      sessions: 12,
-      toolsUsed: [
-        { name: "Debugging", count: 45 },
-        { name: "Code Generation", count: 20 },
-      ],
-      pluginsUsed: [
-        { name: "Copilot Chat", count: 65 },
-      ],
-      mcpUsage: [],
-      skillsUsage: [
-        { name: "Java", count: 120 },
-        { name: "Spring", count: 85 },
-      ],
-    }
-  ]
 };
 
 const geminiData: ProviderData = {
@@ -217,44 +108,6 @@ const geminiData: ProviderData = {
     { name: "gemini-1.5-pro", tokens: 1800000, cost: 3.10 },
     { name: "gemini-1.5-flash", tokens: 700000, cost: 0.80 },
   ],
-  detailedAnalytics: [
-    {
-      name: "data-pipeline",
-      sessions: 25,
-      toolsUsed: [
-        { name: "Code Generation", count: 85 },
-        { name: "Data Analysis", count: 65 },
-      ],
-      pluginsUsed: [
-        { name: "Gemini Code Assist", count: 110 },
-      ],
-      mcpUsage: [
-        { name: "BigQuery Schema", requests: 45 },
-      ],
-      skillsUsage: [
-        { name: "Python", count: 160 },
-        { name: "SQL", count: 120 },
-      ],
-    },
-    {
-      name: "ml-models",
-      sessions: 18,
-      toolsUsed: [
-        { name: "Code Generation", count: 60 },
-        { name: "Debugging", count: 40 },
-      ],
-      pluginsUsed: [
-        { name: "Gemini Code Assist", count: 80 },
-      ],
-      mcpUsage: [
-        { name: "Vertex AI Docs", requests: 25 },
-      ],
-      skillsUsage: [
-        { name: "Python", count: 140 },
-        { name: "TensorFlow", count: 90 },
-      ],
-    }
-  ]
 };
 
 export const PROVIDERS: Record<Provider, ProviderData> = {

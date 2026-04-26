@@ -20,7 +20,6 @@ use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher}
 use tauri::{Emitter, Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
 
 #[cfg(target_os = "macos")]
-use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 /// Width of the menubar popup window in logical pixels — must match `tauri.conf.json`.
 const WIN_WIDTH_PX: f64 = 440.0;
@@ -47,6 +46,13 @@ fn claude_stats_path() -> Option<std::path::PathBuf> {
     })
 }
 
+/// Returns the path to `~/.claude/projects/`, or `None` if `$HOME` is unset.
+fn claude_projects_path() -> Option<std::path::PathBuf> {
+    std::env::var("HOME").ok().map(|home| {
+        std::path::PathBuf::from(home).join(".claude").join("projects")
+    })
+}
+
 /// Returns the path to the Codex sessions directory.
 ///
 /// Uses `$CODEX_HOME/sessions` when `CODEX_HOME` is set, otherwise falls back
@@ -61,6 +67,290 @@ fn codex_sessions_path() -> Option<std::path::PathBuf> {
             .join(".codex")
             .join("sessions")
     })
+}
+
+// ── Claude session JSONL types ────────────────────────────────────────────────
+
+/// One line from a Claude session `.jsonl` file. Only fields needed for
+/// token aggregation are deserialized; everything else is ignored.
+///
+/// Two formats exist in the wild:
+/// - Older: `usage` at the top level alongside `type` and `timestamp`
+/// - Newer: `usage` nested under a `message` object
+#[derive(serde::Deserialize)]
+struct SessionLine {
+    #[serde(rename = "type")]
+    kind: String,
+    timestamp: Option<String>,
+    /// Older format — usage at the top level.
+    usage: Option<SessionUsage>,
+    /// Newer format — usage nested under `message`.
+    message: Option<SessionMessage>,
+}
+
+#[derive(serde::Deserialize)]
+struct SessionMessage {
+    usage: Option<SessionUsage>,
+}
+
+#[derive(serde::Deserialize)]
+struct SessionUsage {
+    #[serde(default)]
+    input_tokens: u64,
+    #[serde(default)]
+    output_tokens: u64,
+    #[serde(default)]
+    cache_read_input_tokens: u64,
+    #[serde(default)]
+    cache_creation_input_tokens: u64,
+}
+
+/// Scans `~/.claude/projects/**/*.jsonl` for assistant messages within the
+/// last `days` calendar days and returns per-day token sums keyed by
+/// ISO date (`"YYYY-MM-DD"`). Tuple is `(input, output, cache)`.
+///
+/// Files are pre-filtered by `mtime` so only recent session files are opened.
+fn aggregate_claude_sessions(days: u32) -> HashMap<String, (u64, u64, u64)> {
+    let root = match claude_projects_path() {
+        Some(p) => p,
+        None => return HashMap::new(),
+    };
+    aggregate_claude_sessions_at(&root, days)
+}
+
+fn aggregate_claude_sessions_at(projects_root: &std::path::Path, days: u32) -> HashMap<String, (u64, u64, u64)> {
+    let days = days.min(365);
+    let mut daily: HashMap<String, (u64, u64, u64)> = HashMap::new();
+
+    let cutoff = std::time::SystemTime::now()
+        .checked_sub(Duration::from_secs(u64::from(days) * 86_400))
+        .unwrap_or(std::time::UNIX_EPOCH);
+
+    let project_dirs = match std::fs::read_dir(projects_root) {
+        Ok(d) => d,
+        Err(_) => return daily,
+    };
+
+    for proj_entry in project_dirs.flatten() {
+        // Use file_type() — unlike is_dir(), it does NOT follow symlinks.
+        let ft = match proj_entry.file_type() { Ok(t) => t, Err(_) => continue };
+        if !ft.is_dir() {
+            continue;
+        }
+        let proj_path = proj_entry.path();
+
+        let session_files = match std::fs::read_dir(&proj_path) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        for file_entry in session_files.flatten() {
+            let file_path = file_entry.path();
+            let fname = file_path
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or("");
+            if !fname.ends_with(".jsonl") {
+                continue;
+            }
+
+            // Skip files not modified within the window.
+            if let Ok(meta) = file_path.metadata() {
+                if let Ok(mtime) = meta.modified() {
+                    if mtime < cutoff {
+                        continue;
+                    }
+                }
+            }
+
+            let content = match std::fs::read_to_string(&file_path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            for line in content.lines() {
+                if line.is_empty() {
+                    continue;
+                }
+                let msg: SessionLine = match serde_json::from_str(line) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                if msg.kind != "assistant" {
+                    continue;
+                }
+                // Resolve usage from top-level (older format) or message.usage (newer format).
+                let usage = match msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) {
+                    Some(u) => u,
+                    None => continue,
+                };
+                let ts = match msg.timestamp {
+                    Some(t) => t,
+                    None => continue,
+                };
+                // ISO timestamp: "2026-04-18T20:11:33.757Z" → take first 10 chars
+                let date = ts.get(..10).unwrap_or("").to_string();
+                if date.is_empty() {
+                    continue;
+                }
+                let entry = daily.entry(date).or_insert((0, 0, 0));
+                entry.0 += usage.input_tokens;
+                entry.1 += usage.output_tokens;
+                entry.2 += usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
+            }
+        }
+    }
+
+    daily
+}
+
+// ── Per-project aggregation ───────────────────────────────────────────────────
+
+/// Decodes a Claude project directory name back to a human-readable project name.
+///
+/// Claude encodes the project's absolute path as the directory name by replacing
+/// each `/` with `-` (e.g. `-Users-alice-code-my-app` → `my-app`).
+/// We strip the HOME prefix then greedily walk the filesystem to find the real path,
+/// returning its last component. Falls back to the last dash-segment on failure.
+fn project_display_name(dir_name: &str) -> String {
+    fn last_dash_segment(s: &str) -> String {
+        s.trim_start_matches('-')
+            .split('-')
+            .filter(|p| !p.is_empty())
+            .last()
+            .unwrap_or(s)
+            .to_string()
+    }
+
+    fn greedy_last(base: &std::path::Path, rest: &str, depth: u8) -> Option<String> {
+        if depth > 10 {
+            return None;
+        }
+        if rest.is_empty() {
+            return base.file_name()?.to_str().map(String::from);
+        }
+        let mut children: Vec<String> = std::fs::read_dir(base)
+            .ok()?
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter(|name| rest.starts_with(name.as_str()))
+            .collect();
+        // Longest match first to avoid short-circuit on common prefixes.
+        children.sort_by_key(|s| std::cmp::Reverse(s.len()));
+        for child in &children {
+            let after = rest[child.len()..].trim_start_matches('-');
+            if let Some(result) = greedy_last(&base.join(child), after, depth + 1) {
+                return Some(result);
+            }
+        }
+        None
+    }
+
+    let Ok(home) = std::env::var("HOME") else {
+        return last_dash_segment(dir_name);
+    };
+    // Encode HOME the same way Claude does: strip leading '/' then replace '/' with '-'.
+    let home_encoded = format!("-{}", home.trim_start_matches('/').replace('/', "-"));
+    let rest = match dir_name.strip_prefix(&home_encoded) {
+        Some(r) => r.trim_start_matches('-'),
+        None => return last_dash_segment(dir_name),
+    };
+    let home_path = std::path::PathBuf::from(&home);
+    greedy_last(&home_path, rest, 0).unwrap_or_else(|| last_dash_segment(rest))
+}
+
+/// Per-project token totals for the requested window, returned as part of [`ProviderStats`].
+#[derive(serde::Serialize)]
+pub struct ProjectStat {
+    /// Human-readable project name decoded from the session directory name.
+    name: String,
+    /// Total input + output tokens for this project in the window.
+    tokens: u64,
+}
+
+/// Scans `~/.claude/projects/` and aggregates per-project input+output token totals
+/// across all session JSONL files whose mtime falls within the last `days` days.
+/// Skips temp/worktree directories (those not rooted in `$HOME`).
+fn aggregate_claude_projects(days: u32) -> Vec<ProjectStat> {
+    let projects_root = match claude_projects_path() {
+        Some(p) => p,
+        None => return vec![],
+    };
+    let Ok(home) = std::env::var("HOME") else { return vec![]; };
+    let home_encoded = format!("-{}", home.trim_start_matches('/').replace('/', "-"));
+
+    let cutoff = std::time::SystemTime::now()
+        .checked_sub(Duration::from_secs(u64::from(days) * 86_400))
+        .unwrap_or(std::time::UNIX_EPOCH);
+
+    let project_dirs = match std::fs::read_dir(&projects_root) {
+        Ok(d) => d,
+        Err(_) => return vec![],
+    };
+
+    let mut stats: Vec<ProjectStat> = project_dirs
+        .flatten()
+        .filter_map(|proj_entry| {
+            // Use file_type() — unlike is_dir(), it does NOT follow symlinks.
+            let ft = proj_entry.file_type().ok()?;
+            if !ft.is_dir() {
+                return None;
+            }
+            let proj_path = proj_entry.path();
+            let dir_name = proj_path.file_name()?.to_str()?.to_string();
+            // Skip worktree / temp project dirs (not rooted in $HOME).
+            if !dir_name.starts_with(&home_encoded) {
+                return None;
+            }
+
+            let mut tokens: u64 = 0;
+
+            for file_entry in std::fs::read_dir(&proj_path).ok()?.flatten() {
+                let file_path = file_entry.path();
+                let fname = file_path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                if !fname.ends_with(".jsonl") {
+                    continue;
+                }
+                if let Ok(meta) = file_path.metadata() {
+                    if let Ok(mtime) = meta.modified() {
+                        if mtime < cutoff {
+                            continue;
+                        }
+                    }
+                }
+                let content = match std::fs::read_to_string(&file_path) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                for line in content.lines() {
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let msg: SessionLine = match serde_json::from_str(line) {
+                        Ok(m) => m,
+                        Err(_) => continue,
+                    };
+                    if msg.kind != "assistant" {
+                        continue;
+                    }
+                    let usage = match msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) {
+                        Some(u) => u,
+                        None => continue,
+                    };
+                    tokens += usage.input_tokens + usage.output_tokens;
+                }
+            }
+
+            if tokens == 0 {
+                return None;
+            }
+            let name = project_display_name(&dir_name);
+            Some(ProjectStat { name, tokens })
+        })
+        .collect();
+
+    stats.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+    stats
 }
 
 // ── Stats-cache data types ────────────────────────────────────────────────────
@@ -99,7 +389,7 @@ struct ModelUsageEntry {
 
 // ── IPC return types ──────────────────────────────────────────────────────────
 
-/// Token usage for a single calendar day, returned as part of [`ClaudeStats`].
+/// Token usage for a single calendar day, returned as part of [`ProviderStats`].
 #[derive(serde::Serialize, Clone)]
 pub struct DailyUsage {
     /// Date label formatted for chart axes, e.g. `"Mar 06"`.
@@ -112,7 +402,7 @@ pub struct DailyUsage {
     cache_tokens: u64,
 }
 
-/// Aggregate token counts and cost for a single Claude model, returned as part of [`ClaudeStats`].
+/// Aggregate token counts and cost for a single Claude model, returned as part of [`ProviderStats`].
 #[derive(serde::Serialize)]
 pub struct ModelStat {
     /// Model identifier as it appears in `stats-cache.json`, e.g. `"claude-sonnet-4-6"`.
@@ -129,7 +419,7 @@ pub struct ModelStat {
 
 /// Top-level response returned by [`get_claude_stats`] over Tauri IPC.
 #[derive(serde::Serialize)]
-pub struct ClaudeStats {
+pub struct ProviderStats {
     /// Last N days of usage (default 30), sorted oldest-first, date labels ready for chart axes.
     daily_usage: Vec<DailyUsage>,
     /// Per-model breakdown, sorted by total token count descending.
@@ -144,6 +434,72 @@ pub struct ClaudeStats {
     /// Projected month-end cost based on daily average of current month.
     /// None if no data exists.
     projected_monthly_cost_usd: Option<f64>,
+    /// Per-project token totals for the requested window, sorted by tokens descending.
+    project_stats: Vec<ProjectStat>,
+}
+
+// ── Shared stat helpers ───────────────────────────────────────────────────────
+
+fn compute_trend_pct(entries: &[DailyUsage]) -> Option<f64> {
+    let n = entries.len();
+    if n < 7 { return None; }
+    let sum_tokens = |s: &[DailyUsage]| -> u64 {
+        s.iter().map(|d| d.input_tokens + d.output_tokens + d.cache_tokens).sum()
+    };
+    let last7 = sum_tokens(&entries[n - 7..]);
+    let prev7 = if n >= 14 { sum_tokens(&entries[n - 14..n - 7]) } else { 0 };
+    if prev7 == 0 { return None; }
+    #[allow(clippy::cast_precision_loss)]
+    Some(((last7 as f64 - prev7 as f64) / prev7 as f64) * 100.0)
+}
+
+fn sort_model_stats_by_tokens(stats: &mut Vec<ModelStat>) {
+    stats.sort_by_key(|m| std::cmp::Reverse(m.input_tokens + m.output_tokens + m.cache_tokens));
+}
+
+// ── Model pricing ─────────────────────────────────────────────────────────────
+
+const OPUS_INPUT:   f64 = 15.0;
+const OPUS_OUTPUT:  f64 = 75.0;
+const OPUS_CR:      f64 = 1.50;
+const OPUS_CW:      f64 = 18.75;
+
+const SONNET_INPUT: f64 = 3.0;
+const SONNET_OUTPUT:f64 = 15.0;
+const SONNET_CR:    f64 = 0.30;
+const SONNET_CW:    f64 = 3.75;
+
+const HAIKU_INPUT:  f64 = 0.80;
+const HAIKU_OUTPUT: f64 = 4.0;
+const HAIKU_CR:     f64 = 0.08;
+const HAIKU_CW:     f64 = 1.00;
+
+/// USD per million tokens: (input, output, cache_read, cache_write).
+/// Matched by substring so new model versions are covered automatically.
+fn model_pricing_per_mtok(name: &str) -> (f64, f64, f64, f64) {
+    let n = name.to_lowercase();
+    if n.contains("opus") {
+        (OPUS_INPUT, OPUS_OUTPUT, OPUS_CR, OPUS_CW)
+    } else if n.contains("haiku") {
+        (HAIKU_INPUT, HAIKU_OUTPUT, HAIKU_CR, HAIKU_CW)
+    } else {
+        (SONNET_INPUT, SONNET_OUTPUT, SONNET_CR, SONNET_CW)
+    }
+}
+
+fn compute_model_cost(name: &str, m: &ModelUsageEntry) -> f64 {
+    if m.cost_usd > 0.0 {
+        return m.cost_usd;
+    }
+    let (inp, out, cr, cw) = model_pricing_per_mtok(name);
+    let mtok = 1_000_000.0_f64;
+    #[allow(clippy::cast_precision_loss)]
+    {
+        (m.input_tokens as f64 / mtok) * inp
+            + (m.output_tokens as f64 / mtok) * out
+            + (m.cache_read_tokens as f64 / mtok) * cr
+            + (m.cache_creation_tokens as f64 / mtok) * cw
+    }
 }
 
 // ── IPC command ───────────────────────────────────────────────────────────────
@@ -155,7 +511,7 @@ pub struct ClaudeStats {
 /// `days` — optional window size (default 30). Slices the last N days from
 /// the sorted daily entries before returning.
 #[tauri::command]
-fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
+fn get_claude_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     let path = claude_stats_path().ok_or_else(|| "HOME not set".to_string())?;
 
     let content = std::fs::read_to_string(&path)
@@ -178,22 +534,31 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
     );
     let cum_total = cum_input + cum_output + cum_cache;
 
+    // Aggregate real per-type token counts from session JSONL files.
+    // Falls back to the cumulative-ratio estimate for days missing from JSONL.
+    let session_data = aggregate_claude_sessions(days.unwrap_or(30));
+
     // Build daily usage entries — sort by ISO date then keep the last 30 days.
     let mut daily = cache.daily_model_tokens;
     daily.sort_by(|a, b| a.date.cmp(&b.date));
     let mut entries: Vec<DailyUsage> = daily
         .iter()
         .map(|day| {
-            let total: u64 = day.tokens_by_model.values().sum();
-            let (inp, out, cac) = if cum_total > 0 {
-                #[allow(clippy::cast_possible_truncation)] // result ≤ total ≤ u64::MAX by construction
-                let inp = (u128::from(total) * u128::from(cum_input) / u128::from(cum_total)) as u64;
-                #[allow(clippy::cast_possible_truncation)] // result ≤ total ≤ u64::MAX by construction
-                let out = (u128::from(total) * u128::from(cum_output) / u128::from(cum_total)) as u64;
-                let cac = total - inp - out;
-                (inp, out, cac)
+            let (inp, out, cac) = if let Some(&(i, o, c)) = session_data.get(&day.date) {
+                (i, o, c)
             } else {
-                (total, 0, 0)
+                // Fallback: split day total using cumulative model-usage ratios.
+                let total: u64 = day.tokens_by_model.values().sum();
+                if cum_total > 0 {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let inp = (u128::from(total) * u128::from(cum_input) / u128::from(cum_total)) as u64;
+                    #[allow(clippy::cast_possible_truncation)]
+                    let out = (u128::from(total) * u128::from(cum_output) / u128::from(cum_total)) as u64;
+                    let cac = total.saturating_sub(inp + out);
+                    (inp, out, cac)
+                } else {
+                    (total, 0, 0)
+                }
             };
             DailyUsage {
                 date: format_date_label(&day.date),
@@ -207,67 +572,59 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
     // Trend: % change in total tokens, last 7 days vs previous 7 days.
     // Must be computed on the full sorted dataset BEFORE slicing to `limit`,
     // otherwise short windows (1d, 3d, 7d) always produce trend_pct = None.
-    let trend_pct: Option<f64> = {
-        let n = entries.len();
-        if n >= 7 {
-            let last7: u64 = entries[n - 7..]
-                .iter()
-                .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
-                .sum();
-            let prev7: u64 = if n >= 14 {
-                entries[n - 14..n - 7]
-                    .iter()
-                    .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
-                    .sum()
-            } else {
-                0
-            };
-            if prev7 > 0 {
-                #[allow(clippy::cast_precision_loss)]
-                Some(((last7 as f64 - prev7 as f64) / prev7 as f64) * 100.0)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    };
+    let trend_pct = compute_trend_pct(&entries);
 
     let limit = days.map_or(30_usize, |d| d as usize);
     if entries.len() > limit {
         entries = entries.split_off(entries.len() - limit);
     }
 
-    // Total cost: sum costUSD across all model entries.
-    let total_cost_usd: f64 = cache.model_usage.values().map(|m| m.cost_usd).sum();
+    // Total cost: use cached costUSD when available, otherwise compute from
+    // token counts using the pricing table (stats-cache.json often stores 0).
+    let total_cost_usd: f64 = cache.model_usage.iter()
+        .map(|(name, m)| compute_model_cost(name, m))
+        .sum();
+    let lifetime_tokens: u64 = cache.model_usage.values()
+        .map(|m| m.input_tokens + m.output_tokens + m.cache_read_tokens + m.cache_creation_tokens)
+        .sum();
 
-    // Projection requires current-month cost slices which stats-cache.json
-    // does not provide (only lifetime per-model aggregates). Return None until
-    // a monthly data source is available.
-    let projected_monthly_cost_usd: Option<f64> = None;
+    // Project monthly cost: cost-per-token rate × last 30 days of JSONL tokens.
+    // Reuse session_data when the caller requested ≥ 30 days (avoids a second walk).
+    let projected_monthly_cost_usd: Option<f64> = if lifetime_tokens > 0 && total_cost_usd > 0.0 {
+        #[allow(clippy::cast_precision_loss)]
+        let cost_per_token = total_cost_usd / lifetime_tokens as f64;
+        let tokens_30d: u64 = if days.unwrap_or(30) >= 30 {
+            session_data.values().map(|(i, o, c)| i + o + c).sum()
+        } else {
+            aggregate_claude_sessions(30).values().map(|(i, o, c)| i + o + c).sum()
+        };
+        #[allow(clippy::cast_precision_loss)]
+        if tokens_30d > 0 { Some(tokens_30d as f64 * cost_per_token) } else { None }
+    } else {
+        None
+    };
 
     // Build model stats sorted by total token count descending.
     let mut model_stats: Vec<ModelStat> = cache
         .model_usage
         .into_iter()
         .map(|(name, m)| ModelStat {
+            cost_usd: compute_model_cost(&name, &m),
             name,
             input_tokens: m.input_tokens,
             output_tokens: m.output_tokens,
             cache_tokens: m.cache_read_tokens + m.cache_creation_tokens,
-            cost_usd: m.cost_usd,
         })
         .collect();
 
-    model_stats.sort_by(|a, b| {
-        let ta = a.input_tokens + a.output_tokens + a.cache_tokens;
-        let tb = b.input_tokens + b.output_tokens + b.cache_tokens;
-        tb.cmp(&ta)
-    });
+    sort_model_stats_by_tokens(&mut model_stats);
 
-    Ok(ClaudeStats {
+    let project_stats = aggregate_claude_projects(days.unwrap_or(30));
+
+    Ok(ProviderStats {
         daily_usage: entries,
         model_stats,
+        project_stats,
         total_sessions: cache.total_sessions,
         total_cost_usd,
         trend_pct,
@@ -449,19 +806,20 @@ fn days_to_ymd(mut days: u64) -> String {
 /// Returns `Err` when the sessions directory cannot be discovered or read;
 /// the frontend falls back to mock data on error.
 #[tauri::command]
-fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
+fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     // Per-model cumulative token totals — local helper struct.
     struct ModelAccum { input: u64, output: u64, cache: u64 }
 
-    let window = days.unwrap_or(30).max(1);
+    let window = days.unwrap_or(30).max(1).min(365);
     let root = codex_sessions_path().ok_or_else(|| "HOME/CODEX_HOME not set".to_string())?;
 
     if !root.exists() {
         // Empty state — return a valid empty payload rather than an error so
         // the frontend shows "no data" rather than a fallback to mock data.
-        return Ok(ClaudeStats {
+        return Ok(ProviderStats {
             daily_usage: Vec::new(),
             model_stats: Vec::new(),
+            project_stats: Vec::new(),
             total_sessions: 0,
             total_cost_usd: 0.0,
             trend_pct: None,
@@ -488,7 +846,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         .map_err(|e| format!("sessions dir: {e}"))?;
     for year_entry in year_dirs.flatten() {
         let year_path = year_entry.path();
-        if !year_path.is_dir() { continue; }
+        if !year_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
         let Some(year_name) = year_path.file_name().and_then(|s| s.to_str()) else { continue };
         if year_name.len() != 4 || !year_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -501,7 +859,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         let Ok(month_dirs) = std::fs::read_dir(&year_path) else { continue };
         for month_entry in month_dirs.flatten() {
             let month_path = month_entry.path();
-            if !month_path.is_dir() { continue; }
+            if !month_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
             let Some(month_name) = month_path.file_name().and_then(|s| s.to_str()) else { continue };
             if month_name.len() != 2 || !month_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -514,7 +872,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
             let Ok(day_dirs) = std::fs::read_dir(&month_path) else { continue };
             for day_entry in day_dirs.flatten() {
                 let day_path = day_entry.path();
-                if !day_path.is_dir() { continue; }
+                if !day_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
                 let Some(day_name) = day_path.file_name().and_then(|s| s.to_str()) else { continue };
                 if day_name.len() != 2 || !day_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -586,31 +944,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         .collect();
 
     // Trend: last 7 days vs previous 7, computed on the full in-window dataset.
-    let trend_pct: Option<f64> = {
-        let n = daily_usage.len();
-        if n >= 7 {
-            let last7: u64 = daily_usage[n - 7..]
-                .iter()
-                .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
-                .sum();
-            let prev7: u64 = if n >= 14 {
-                daily_usage[n - 14..n - 7]
-                    .iter()
-                    .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
-                    .sum()
-            } else {
-                0
-            };
-            if prev7 > 0 {
-                #[allow(clippy::cast_precision_loss)]
-                Some(((last7 as f64 - prev7 as f64) / prev7 as f64) * 100.0)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    };
+    let trend_pct = compute_trend_pct(&daily_usage);
 
     // Per-model stats, sorted by total tokens descending. Codex logs no cost.
     let mut model_stats: Vec<ModelStat> = models
@@ -623,20 +957,17 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
             cost_usd: 0.0,
         })
         .collect();
-    model_stats.sort_by(|a, b| {
-        let ta = a.input_tokens + a.output_tokens + a.cache_tokens;
-        let tb = b.input_tokens + b.output_tokens + b.cache_tokens;
-        tb.cmp(&ta)
-    });
+    sort_model_stats_by_tokens(&mut model_stats);
 
     // Slice daily_usage to the requested window before returning.
     // trend_pct was computed on the full trend_window dataset above.
     let start = daily_usage.len().saturating_sub(window as usize);
     let daily_usage = daily_usage[start..].to_vec();
 
-    Ok(ClaudeStats {
+    Ok(ProviderStats {
         daily_usage,
         model_stats,
+        project_stats: Vec::new(),
         total_sessions,
         total_cost_usd: 0.0,
         trend_pct,
@@ -755,19 +1086,6 @@ pub fn run() {
                 });
             }
 
-            // Apply native vibrancy — gives a true system-compositor frosted-glass
-            // effect that outperforms CSS backdrop-blur on macOS.
-            #[cfg(target_os = "macos")]
-            if let Some(window) = app.get_webview_window("main") {
-                if let Err(e) = apply_vibrancy(
-                    &window,
-                    NSVisualEffectMaterial::HudWindow,
-                    None,
-                    Some(16.0),
-                ) {
-                    eprintln!("[ai-pulse] vibrancy unavailable: {e}");
-                }
-            }
 
             // Load the dedicated tray icon from the bundled PNG bytes.
             // Falls back to the default window icon if the file is missing.
@@ -786,7 +1104,7 @@ pub fn run() {
             let pending_show_tray = pending_show.clone();
             let tray = TrayIconBuilder::new()
                 .icon(tray_icon)
-                .icon_as_template(true)
+                .icon_as_template(false)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {
@@ -1009,4 +1327,19 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn aggregate_claude_sessions_returns_empty_for_missing_dir() {
+        // Call the inner function directly with a nonexistent path — no env mutation needed.
+        let result = aggregate_claude_sessions_at(
+            std::path::Path::new("/tmp/nonexistent-ai-pulse-test-home-xyz/.claude/projects"),
+            7,
+        );
+        assert!(result.is_empty());
+    }
 }

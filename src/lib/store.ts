@@ -61,10 +61,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "ai-pulse-store",
-      partialize: (state) => {
-        const { autoLaunchEnabled: _omit, ...rest } = state;
-        return rest;
-      },
+      partialize: ({ autoLaunchEnabled: _, ...rest }) => rest,
       merge: (persisted, current) => {
         const raw = persisted as Partial<AppState>;
         const p = raw.provider;

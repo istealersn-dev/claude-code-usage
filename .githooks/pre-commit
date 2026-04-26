@@ -1,0 +1,18 @@
+#!/bin/sh
+# Pre-commit checks — mirrors the gates in release.yml.
+# Runs fast JS checks always; Clippy only when Rust files are staged.
+set -e
+
+echo "▶ Type-check..."
+npm run types
+
+echo "▶ Lint..."
+npm run lint
+
+if git diff --cached --name-only | grep -qE '\.rs$|Cargo\.toml$'; then
+  echo "▶ Clippy..."
+  cargo clippy --manifest-path src-tauri/Cargo.toml -- \
+    -W clippy::all -W clippy::pedantic -D warnings
+fi
+
+echo "✓ All checks passed."

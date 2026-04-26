@@ -6,15 +6,49 @@ import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats, onClaudeStatsUpdated } from "@/lib/claudeUsage";
 import { fetchCodexStats, onCodexStatsUpdated } from "@/lib/codexUsage";
 import { useAppStore, ALL_TIMEFRAMES } from "@/lib/store";
-import type { Timeframe } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
-import type { ClaudeUsageResult } from "@/lib/claudeUsage";
+import type { ClaudeUsageResult, ProjectStat } from "@/lib/claudeUsage";
 import type { CodexUsageResult } from "@/lib/codexUsage";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
-import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles, Settings } from "lucide-react";
+import { AlertTriangle, Box, ChevronDown, Code2, DollarSign, Layers, RefreshCw, Settings, Sparkles, TrendingUp, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsModal } from "./SettingsModal";
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
+}
+
+interface TokenUsageRowProps {
+  name: string;
+  tokens: number;
+  totalTokens: number;
+  themeColor: string;
+}
+
+function TokenUsageRow({ name, tokens, totalTokens, themeColor }: TokenUsageRowProps) {
+  const barPct = totalTokens > 0 ? (tokens / totalTokens) * 100 : 0;
+  return (
+    <div className="flex flex-col gap-1 p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors cursor-pointer group">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs">
+          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: themeColor }} />
+          <span className="text-gray-300 group-hover:text-white transition-colors truncate max-w-[180px]">{name}</span>
+        </div>
+        <span className="text-[9px] font-mono text-gray-500 group-hover:text-gray-300 transition-colors shrink-0">
+          {formatTokenCount(tokens)}
+        </span>
+      </div>
+      <div className="h-[3px] bg-[#001d3d] rounded-full overflow-hidden ml-3.5">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${barPct}%`, backgroundColor: themeColor, opacity: 0.65 }}
+        />
+      </div>
+    </div>
+  );
+}
 
 const PROVIDER_ICONS: Record<Provider, React.ElementType> = {
   claude: Zap,
@@ -26,7 +60,7 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd, autoLaunchEnabled, setAutoLaunchEnabled } = useAppStore(
+  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd, setBudgetLimit, autoLaunchEnabled, setAutoLaunchEnabled } = useAppStore(
     useShallow((s) => ({
       provider: s.provider,
       setProvider: s.setProvider,
@@ -37,6 +71,7 @@ export function Dashboard() {
       closeSettings: s.closeSettings,
       resetPreferences: s.resetPreferences,
       budgetLimitUsd: s.budgetLimitUsd,
+      setBudgetLimit: s.setBudgetLimit,
       autoLaunchEnabled: s.autoLaunchEnabled,
       setAutoLaunchEnabled: s.setAutoLaunchEnabled,
     }))
@@ -50,6 +85,7 @@ export function Dashboard() {
   // Async overrides — set only from fetch callbacks, never synchronously in effects
   const [claudeUsageData, setClaudeUsageData] = useState<typeof providerData.usageData | null>(null);
   const [realModelUsage, setRealModelUsage] = useState<typeof providerData.modelUsage | null>(null);
+  const [realProjectUsage, setRealProjectUsage] = useState<ProjectStat[] | null>(null);
   const [claudeTotalCost, setClaudeTotalCost] = useState<number | null>(null);
   const [claudeTrendPct, setClaudeTrendPct] = useState<number | null>(null);
   const [claudeProjectedCost, setClaudeProjectedCost] = useState<number | null>(null);
@@ -68,6 +104,7 @@ export function Dashboard() {
   const applyClaudeResult = useCallback((result: ClaudeUsageResult) => {
     if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
     if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+    if (result.projectStats.length > 0) setRealProjectUsage(result.projectStats);
     setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
     setClaudeTrendPct(result.trendPct);
     setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
@@ -151,8 +188,8 @@ export function Dashboard() {
 
   const handleResetPreferences = useCallback(() => {
     invoke<void>("toggle_autolaunch", { enable: false })
-      .catch(() => {})
-      .then(() => resetPreferences());
+      .then(() => resetPreferences())
+      .catch(() => setError("Reset failed — auto-launch may still be active"));
   }, [resetPreferences]);
 
   // Fetch real Claude stats — setState only in async callbacks, never synchronously.
@@ -269,81 +306,100 @@ export function Dashboard() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -20, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className="relative w-[360px] sm:w-[400px] max-h-[calc(100vh-50px)] flex flex-col bg-[#000814]/60 border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
+      className="relative w-full max-h-screen flex flex-col bg-[#000814]/95 border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
       style={{ '--theme-color': providerData.themeColor } as React.CSSProperties}
     >
       {/* Header */}
         <div className="shrink-0 bg-[#001d3d]/50 border-b border-[#003566] flex flex-col">
-          <div className="p-3 sm:p-4 pb-2 flex justify-between items-center">
+          {/* Row 1: Brand + provider selector + actions */}
+          <div className="px-3 sm:px-4 pt-3 pb-2 flex justify-between items-center">
             <div className="flex items-center gap-2">
+              {/* Brand */}
               <ProviderIcon className="w-4 h-4" style={{ color: providerData.themeColor }} />
-              <select
-                value={provider}
-                onChange={(e) => setProvider(e.target.value as Provider)}
-                className="bg-transparent text-xs sm:text-sm font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none"
+              <span
+                className="text-xs font-extrabold tracking-widest uppercase"
                 style={{ color: providerData.themeColor }}
               >
-                <option value="claude">AI Pulse</option>
-                <option value="codex">OpenAI Codex</option>
-                <option value="gemini">Google Gemini</option>
-              </select>
+                AI Pulse
+              </span>
+              {/* Divider */}
+              <div className="w-px h-3.5 bg-[#003566] mx-1" />
+              {/* Inline provider selector */}
+              <div className="relative flex items-center gap-1">
+                <div
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ backgroundColor: providerData.themeColor }}
+                />
+                <select
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as Provider)}
+                  aria-label="Select provider"
+                  className="bg-transparent text-[10px] font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none pr-4 text-gray-400 hover:text-white transition-colors"
+                >
+                  {(Object.keys(PROVIDERS) as Provider[]).map((p) => (
+                    <option key={p} value={p}>{PROVIDERS[p].name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-2.5 h-2.5 text-gray-500 absolute right-0 pointer-events-none" />
+              </div>
             </div>
             <div className="flex items-center gap-3">
-                <AnimatePresence mode="wait">
-                  {error ? (
-                    <motion.span
-                      key="error"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="text-[10px] sm:text-xs text-red-400 font-mono"
-                    >
-                      {error}
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      key="cost"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="text-[10px] sm:text-xs text-gray-400 font-mono"
-                    >
-                      {getCostLabel()}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-                <div className="flex items-center gap-2 text-gray-400">
-                    {/* Issue 6: interactive element must be a <button> */}
-                    <button
-                      onClick={openSettings}
-                      aria-label="Open settings"
-                      className="text-gray-400 hover:text-white transition-colors"
-                    >
-                      <Settings className="w-3 h-3" />
-                    </button>
-                    <RefreshCw
-                      className={cn(
-                        "w-3 h-3 hover:text-white cursor-pointer transition-all",
-                        isRefreshing && "animate-spin text-[#ffd60a]"
-                      )}
-                      onClick={handleRefresh}
-                    />
-                </div>
+              <AnimatePresence mode="wait">
+                {error ? (
+                  <motion.span
+                    key="error"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="text-[10px] sm:text-xs text-red-400 font-mono"
+                  >
+                    {error}
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="cost"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="text-[10px] sm:text-xs text-gray-400 font-mono"
+                  >
+                    {getCostLabel()}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+              <div className="flex items-center gap-2 text-gray-400">
+                <button
+                  onClick={openSettings}
+                  aria-label="Open settings"
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <Settings className="w-3 h-3" />
+                </button>
+                <button onClick={handleRefresh} aria-label="Refresh data" className="text-gray-400 hover:text-white transition-colors">
+                  <RefreshCw className={cn("w-3 h-3 transition-all", isRefreshing && "animate-spin text-[#ffd60a]")} />
+                </button>
+              </div>
             </div>
           </div>
+          {/* Row 2: Timeframe range filter */}
           {isRealDataProvider && (
-            <div className="px-3 sm:px-4 pb-2 flex items-center gap-1">
+            <div className="px-3 sm:px-4 pb-2 flex items-center gap-2">
+              <span className="text-[8px] uppercase tracking-widest text-gray-500 font-semibold">
+                Range
+              </span>
+              <div className="flex-1" />
               {ALL_TIMEFRAMES.map((t) => (
                 <button
                   key={t}
                   onClick={() => setTimeframe(t)}
+                  aria-pressed={timeframe === t}
                   className={cn(
                     "px-2 py-0.5 text-[10px] uppercase font-bold rounded transition-all",
                     timeframe === t
                       ? "bg-[#003566]"
                       : "text-gray-500 hover:text-gray-300"
                   )}
-                  style={timeframe === t ? { color: providerData.themeColor } : {}}
+                  style={timeframe === t ? { color: providerData.themeColor } : undefined}
                 >
                   {t}
                 </button>
@@ -354,7 +410,7 @@ export function Dashboard() {
 
         {provider === "claude" && claudeTotalCost !== null && budgetLimitUsd !== null && claudeTotalCost > budgetLimitUsd && (
           <div className="shrink-0 bg-red-900/40 border-b border-red-700/50 px-4 py-1.5 text-[10px] text-red-300 flex items-center gap-2">
-            <span>⚠</span>
+            <AlertTriangle className="w-3 h-3 shrink-0" />
             <span>Lifetime spend ${claudeTotalCost.toFixed(2)} exceeds budget ${budgetLimitUsd.toFixed(2)}</span>
           </div>
         )}
@@ -428,7 +484,7 @@ export function Dashboard() {
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
               <TrendingUp className="w-3 h-3" /> {isRealDataProvider ? `${timeframe} Token Trend` : "Token Trend"}
             </h3>
-            <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
+            <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[180px] sm:h-[220px]">
               <UsageChart data={usageData} color={providerData.themeColor} />
             </div>
           </div>
@@ -462,9 +518,12 @@ export function Dashboard() {
                   <Box className="w-3 h-3" /> Models
                 </button>
               </div>
+              <span className="text-[9px] text-gray-500 uppercase tracking-wider">
+                {viewMode === "projects" ? "Token share by project" : "Token share by model"}
+              </span>
             </div>
 
-            <div className="bg-[#001d3d]/20 rounded-xl p-2 sm:p-3 border border-[#003566]/30 min-h-[120px]">
+            <div className="bg-[#001d3d]/20 rounded-xl p-2 sm:p-3 border border-[#003566]/30 h-[200px] overflow-y-auto custom-scrollbar">
               <AnimatePresence mode="wait">
                 {viewMode === "projects" ? (
                   <motion.div
@@ -473,31 +532,33 @@ export function Dashboard() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
                     transition={{ duration: 0.2 }}
-                    className="space-y-1 sm:space-y-2"
+                    className="space-y-1"
                   >
-                    {provider === "claude" ? (
-                      <p className="text-[10px] text-gray-500 text-center py-4 px-2 leading-relaxed">
-                        Project breakdown is not available — Claude Code does not expose per-project usage in stats-cache.json
-                      </p>
+                    {provider === "claude" && realProjectUsage !== null ? (
+                      (() => {
+                        const totalTokens = realProjectUsage.reduce((sum, p) => sum + p.tokens, 0);
+                        return realProjectUsage.map((project) => (
+                          <TokenUsageRow
+                            key={project.name}
+                            name={project.name}
+                            tokens={project.tokens}
+                            totalTokens={totalTokens}
+                            themeColor={providerData.themeColor}
+                          />
+                        ));
+                      })()
+                    ) : provider === "claude" ? (
+                      <p className="text-[10px] text-gray-500 text-center py-6">Loading project data…</p>
                     ) : provider === "codex" ? (
-                      <p className="text-[10px] text-gray-500 text-center py-4 px-2 leading-relaxed">
-                        Project breakdown is not available — Codex session files do not record a project identifier
+                      <p className="text-[10px] text-gray-500 text-center py-6 px-2 leading-relaxed">
+                        Project breakdown is not available for Codex sessions
                       </p>
                     ) : (
                       providerData.projectUsage.map((project) => (
                         <div key={project.name} className="relative flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-[#000814] border border-[#003566] text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl translate-y-2 group-hover:translate-y-0">
-                            <span className="font-mono" style={{ color: providerData.themeColor }}>{(project.tokens / 1000).toFixed(0)}k</span> tokens
-                            <span className="mx-1 text-gray-500">•</span>
-                            <span className="text-white font-mono">${project.cost.toFixed(2)}</span>
-                          </div>
-
                           <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
-                            <span className="text-gray-300 group-hover:text-white transition-colors">
-                              {project.name}
-                            </span>
+                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: providerData.themeColor }} />
+                            <span className="text-gray-300 group-hover:text-white transition-colors">{project.name}</span>
                           </div>
                           <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
                             ${project.cost.toFixed(2)}
@@ -515,19 +576,18 @@ export function Dashboard() {
                     transition={{ duration: 0.2 }}
                     className="space-y-1 sm:space-y-2"
                   >
-                    {displayModelUsage.map((model) => (
-                      <div key={model.name} className="flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
-                          <span className="text-gray-300 group-hover:text-white transition-colors">
-                            {model.name}
-                          </span>
-                        </div>
-                        <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
-                          {model.cost === 0 ? "—" : `$${model.cost.toFixed(2)}`}
-                        </span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const totalTokens = displayModelUsage.reduce((sum, m) => sum + m.tokens, 0);
+                      return displayModelUsage.map((model) => (
+                        <TokenUsageRow
+                          key={model.name}
+                          name={model.name}
+                          tokens={model.tokens}
+                          totalTokens={totalTokens}
+                          themeColor={providerData.themeColor}
+                        />
+                      ));
+                    })()}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -535,37 +595,13 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="shrink-0 bg-[#000814] p-3 border-t border-[#003566] text-center">
-          <button
-            onClick={() => {
-              WebviewWindow.getByLabel("detailed-report")
-                .then((existing) => {
-                  if (existing) return existing.setFocus();
-                  new WebviewWindow("detailed-report", {
-                    url: `/?window=report&provider=${provider}`,
-                    title: "Detailed Usage Report",
-                    width: 1000,
-                    height: 800,
-                    decorations: true,
-                    resizable: true,
-                  });
-                })
-                .catch(() => setError("Could not open report"));
-            }}
-            className="text-[10px] transition-colors uppercase tracking-widest font-bold"
-            style={{ color: providerData.themeColor }}
-          >
-            View Detailed Report
-          </button>
-        </div>
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={closeSettings}
           themeColor={providerData.themeColor}
           onResetPreferences={handleResetPreferences}
           budgetLimitUsd={budgetLimitUsd}
-          onSetBudgetLimit={useAppStore.getState().setBudgetLimit}
+          onSetBudgetLimit={setBudgetLimit}
           autoLaunchEnabled={autoLaunchEnabled}
           onToggleAutoLaunch={handleToggleAutoLaunch}
         />
