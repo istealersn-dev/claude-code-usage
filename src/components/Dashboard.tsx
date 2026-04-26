@@ -11,7 +11,6 @@ import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult, ProjectStat } from "@/lib/claudeUsage";
 import type { CodexUsageResult } from "@/lib/codexUsage";
 import { invoke } from "@tauri-apps/api/core";
-import { DetailedReport } from "./DetailedReport";
 import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles, Settings, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsModal } from "./SettingsModal";
@@ -84,7 +83,6 @@ export function Dashboard() {
 
   // Reset viewMode when provider changes — setState during render is the React-recommended
   // pattern for "derived state from props" and avoids synchronous setState inside effects.
-  const [showReport, setShowReport] = useState(false);
   const [prevProvider, setPrevProvider] = useState<Provider>(provider);
   const [viewMode, setViewMode] = useState<"projects" | "models">("models");
   const isRealDataProvider = provider === "claude" || provider === "codex";
@@ -590,23 +588,6 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="shrink-0 bg-[#000814] p-3 border-t border-[#003566] text-center">
-          <button
-            onClick={() => setShowReport(true)}
-            className="text-[10px] transition-colors uppercase tracking-widest font-bold"
-            style={{ color: providerData.themeColor }}
-          >
-            View Detailed Report
-          </button>
-        </div>
-
-        {/* Detailed report overlay — covers the entire popover, no separate OS window */}
-        {showReport && (
-          <div className="absolute inset-0 z-50 rounded-2xl overflow-hidden">
-            <DetailedReport provider={provider} onClose={() => setShowReport(false)} />
-          </div>
-        )}
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={closeSettings}
