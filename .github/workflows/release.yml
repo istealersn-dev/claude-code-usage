@@ -6,7 +6,51 @@ on:
       - "v*"
 
 jobs:
+  # ── Validation ──────────────────────────────────────────────────────────────
+  # Runs the same checks as the local pre-commit hook before any build starts.
+  # The release job will not run if any step here fails.
+  validate:
+    name: Validate (type-check · lint · clippy)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run types
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Clippy
+        run: |
+          cargo clippy --manifest-path src-tauri/Cargo.toml \
+            -- -W clippy::all -W clippy::pedantic -D warnings
+
+  # ── Production build ────────────────────────────────────────────────────────
+  # Only runs after validate succeeds. Produces a universal macOS binary and
+  # publishes a draft GitHub Release with install instructions.
   release:
+    name: Build & publish macOS release
+    needs: validate
     runs-on: macos-latest
     permissions:
       contents: write
@@ -20,7 +64,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Set up Rust
+      - name: Set up Rust (universal targets)
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -33,7 +77,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build (universal binary)
+      - name: Build universal binary and publish draft release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
