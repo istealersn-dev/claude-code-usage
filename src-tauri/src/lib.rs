@@ -533,11 +533,22 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
 
     // Total cost: sum costUSD across all model entries.
     let total_cost_usd: f64 = cache.model_usage.values().map(|m| m.cost_usd).sum();
+    let lifetime_tokens: u64 = cache.model_usage.values()
+        .map(|m| m.input_tokens + m.output_tokens + m.cache_read_tokens + m.cache_creation_tokens)
+        .sum();
 
-    // Projection requires current-month cost slices which stats-cache.json
-    // does not provide (only lifetime per-model aggregates). Return None until
-    // a monthly data source is available.
-    let projected_monthly_cost_usd: Option<f64> = None;
+    // Derive cost-per-token from lifetime model data, apply to last 30 days
+    // of actual JSONL token usage to estimate this month's spend.
+    let projected_monthly_cost_usd: Option<f64> = if lifetime_tokens > 0 && total_cost_usd > 0.0 {
+        #[allow(clippy::cast_precision_loss)]
+        let cost_per_token = total_cost_usd / lifetime_tokens as f64;
+        let sessions_30d = aggregate_claude_sessions(30);
+        let tokens_30d: u64 = sessions_30d.values().map(|(i, o, c)| i + o + c).sum();
+        #[allow(clippy::cast_precision_loss)]
+        if tokens_30d > 0 { Some(tokens_30d as f64 * cost_per_token) } else { None }
+    } else {
+        None
+    };
 
     // Build model stats sorted by total token count descending.
     let mut model_stats: Vec<ModelStat> = cache
