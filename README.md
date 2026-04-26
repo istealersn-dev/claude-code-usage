@@ -1,10 +1,23 @@
-# AI Pulse
+<div align="center">
+  <img src="docs/assets/icon.png" width="96" alt="AI Pulse icon" />
+  <h1>AI Pulse</h1>
+  <p>Native macOS menubar app for real-time token usage, session counts, and cost tracking across AI coding assistants.</p>
 
-A native macOS menubar app that gives developers real-time visibility into token usage, session counts, and cost across AI coding assistants — without leaving the editor.
+  <img src="https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey?logo=apple&logoColor=white" alt="macOS 13+" />
+  <img src="https://img.shields.io/badge/built%20with-Tauri%20v2-24C8D8?logo=tauri&logoColor=white" alt="Tauri v2" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Rust-stable-CE422B?logo=rust&logoColor=white" alt="Rust" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" />
 
-Built with **Tauri v2** (Rust backend) + **React 19** + **TypeScript**. Reads directly from local session files — no API keys, no network calls, no data leaves your machine.
+  <br /><br />
+
+  <img src="docs/assets/screenshot.png" width="380" alt="AI Pulse dashboard" />
+</div>
 
 ---
+
+Reads directly from local session files — no API keys, no network calls, no data leaves your machine.
 
 ## Features
 
@@ -35,7 +48,7 @@ Built with **Tauri v2** (Rust backend) + **React 19** + **TypeScript**. Reads di
 ## Getting Started
 
 ```bash
-# 1. Install JS dependencies
+# 1. Install JS dependencies (also wires the pre-commit hook)
 npm install
 
 # 2. Start the app in dev mode (opens the menubar app with hot reload)
