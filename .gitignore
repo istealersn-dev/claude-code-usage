@@ -8,4 +8,6 @@ coverage/
 !.env.example
 .claude/
 _code-review/
+.superpowers/
+docs/superpowers/
 src-tauri/gen/schemas/
