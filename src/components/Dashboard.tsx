@@ -296,6 +296,7 @@ export function Dashboard() {
                 <select
                   value={provider}
                   onChange={(e) => setProvider(e.target.value as Provider)}
+                  aria-label="Select provider"
                   className="bg-transparent text-[10px] font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none pr-4 text-gray-400 hover:text-white transition-colors"
                 >
                   <option value="claude">Claude</option>
@@ -337,13 +338,9 @@ export function Dashboard() {
                 >
                   <Settings className="w-3 h-3" />
                 </button>
-                <RefreshCw
-                  className={cn(
-                    "w-3 h-3 hover:text-white cursor-pointer transition-all",
-                    isRefreshing && "animate-spin text-[#ffd60a]"
-                  )}
-                  onClick={handleRefresh}
-                />
+                <button onClick={handleRefresh} aria-label="Refresh data" className="text-gray-400 hover:text-white transition-colors">
+                  <RefreshCw className={cn("w-3 h-3 transition-all", isRefreshing && "animate-spin text-[#ffd60a]")} />
+                </button>
               </div>
             </div>
           </div>
@@ -358,13 +355,14 @@ export function Dashboard() {
                 <button
                   key={t}
                   onClick={() => setTimeframe(t)}
+                  aria-pressed={timeframe === t}
                   className={cn(
                     "px-2 py-0.5 text-[10px] uppercase font-bold rounded transition-all",
                     timeframe === t
                       ? "bg-[#003566]"
                       : "text-gray-500 hover:text-gray-300"
                   )}
-                  style={timeframe === t ? { color: providerData.themeColor } : {}}
+                  style={timeframe === t ? { color: providerData.themeColor } : undefined}
                 >
                   {t}
                 </button>
