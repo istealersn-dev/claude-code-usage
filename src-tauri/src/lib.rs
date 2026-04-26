@@ -259,7 +259,7 @@ fn project_display_name(dir_name: &str) -> String {
     greedy_last(&home_path, rest, 0).unwrap_or_else(|| last_dash_segment(rest))
 }
 
-/// Per-project token totals for the requested window, returned as part of [`ClaudeStats`].
+/// Per-project token totals for the requested window, returned as part of [`ProviderStats`].
 #[derive(serde::Serialize)]
 pub struct ProjectStat {
     /// Human-readable project name decoded from the session directory name.
@@ -389,7 +389,7 @@ struct ModelUsageEntry {
 
 // ── IPC return types ──────────────────────────────────────────────────────────
 
-/// Token usage for a single calendar day, returned as part of [`ClaudeStats`].
+/// Token usage for a single calendar day, returned as part of [`ProviderStats`].
 #[derive(serde::Serialize, Clone)]
 pub struct DailyUsage {
     /// Date label formatted for chart axes, e.g. `"Mar 06"`.
@@ -402,7 +402,7 @@ pub struct DailyUsage {
     cache_tokens: u64,
 }
 
-/// Aggregate token counts and cost for a single Claude model, returned as part of [`ClaudeStats`].
+/// Aggregate token counts and cost for a single Claude model, returned as part of [`ProviderStats`].
 #[derive(serde::Serialize)]
 pub struct ModelStat {
     /// Model identifier as it appears in `stats-cache.json`, e.g. `"claude-sonnet-4-6"`.
@@ -419,7 +419,7 @@ pub struct ModelStat {
 
 /// Top-level response returned by [`get_claude_stats`] over Tauri IPC.
 #[derive(serde::Serialize)]
-pub struct ClaudeStats {
+pub struct ProviderStats {
     /// Last N days of usage (default 30), sorted oldest-first, date labels ready for chart axes.
     daily_usage: Vec<DailyUsage>,
     /// Per-model breakdown, sorted by total token count descending.
@@ -436,6 +436,25 @@ pub struct ClaudeStats {
     projected_monthly_cost_usd: Option<f64>,
     /// Per-project token totals for the requested window, sorted by tokens descending.
     project_stats: Vec<ProjectStat>,
+}
+
+// ── Shared stat helpers ───────────────────────────────────────────────────────
+
+fn compute_trend_pct(entries: &[DailyUsage]) -> Option<f64> {
+    let n = entries.len();
+    if n < 7 { return None; }
+    let sum_tokens = |s: &[DailyUsage]| -> u64 {
+        s.iter().map(|d| d.input_tokens + d.output_tokens + d.cache_tokens).sum()
+    };
+    let last7 = sum_tokens(&entries[n - 7..]);
+    let prev7 = if n >= 14 { sum_tokens(&entries[n - 14..n - 7]) } else { 0 };
+    if prev7 == 0 { return None; }
+    #[allow(clippy::cast_precision_loss)]
+    Some(((last7 as f64 - prev7 as f64) / prev7 as f64) * 100.0)
+}
+
+fn sort_model_stats_by_tokens(stats: &mut Vec<ModelStat>) {
+    stats.sort_by_key(|m| std::cmp::Reverse(m.input_tokens + m.output_tokens + m.cache_tokens));
 }
 
 // ── Model pricing ─────────────────────────────────────────────────────────────
@@ -492,7 +511,7 @@ fn compute_model_cost(name: &str, m: &ModelUsageEntry) -> f64 {
 /// `days` — optional window size (default 30). Slices the last N days from
 /// the sorted daily entries before returning.
 #[tauri::command]
-fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
+fn get_claude_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     let path = claude_stats_path().ok_or_else(|| "HOME not set".to_string())?;
 
     let content = std::fs::read_to_string(&path)
@@ -553,31 +572,7 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
     // Trend: % change in total tokens, last 7 days vs previous 7 days.
     // Must be computed on the full sorted dataset BEFORE slicing to `limit`,
     // otherwise short windows (1d, 3d, 7d) always produce trend_pct = None.
-    let trend_pct: Option<f64> = {
-        let n = entries.len();
-        if n >= 7 {
-            let last7: u64 = entries[n - 7..]
-                .iter()
-                .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
-                .sum();
-            let prev7: u64 = if n >= 14 {
-                entries[n - 14..n - 7]
-                    .iter()
-                    .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
-                    .sum()
-            } else {
-                0
-            };
-            if prev7 > 0 {
-                #[allow(clippy::cast_precision_loss)]
-                Some(((last7 as f64 - prev7 as f64) / prev7 as f64) * 100.0)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    };
+    let trend_pct = compute_trend_pct(&entries);
 
     let limit = days.map_or(30_usize, |d| d as usize);
     if entries.len() > limit {
@@ -622,15 +617,11 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         })
         .collect();
 
-    model_stats.sort_by(|a, b| {
-        let ta = a.input_tokens + a.output_tokens + a.cache_tokens;
-        let tb = b.input_tokens + b.output_tokens + b.cache_tokens;
-        tb.cmp(&ta)
-    });
+    sort_model_stats_by_tokens(&mut model_stats);
 
     let project_stats = aggregate_claude_projects(days.unwrap_or(30));
 
-    Ok(ClaudeStats {
+    Ok(ProviderStats {
         daily_usage: entries,
         model_stats,
         project_stats,
@@ -815,17 +806,17 @@ fn days_to_ymd(mut days: u64) -> String {
 /// Returns `Err` when the sessions directory cannot be discovered or read;
 /// the frontend falls back to mock data on error.
 #[tauri::command]
-fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
+fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     // Per-model cumulative token totals — local helper struct.
     struct ModelAccum { input: u64, output: u64, cache: u64 }
 
-    let window = days.unwrap_or(30).max(1);
+    let window = days.unwrap_or(30).max(1).min(365);
     let root = codex_sessions_path().ok_or_else(|| "HOME/CODEX_HOME not set".to_string())?;
 
     if !root.exists() {
         // Empty state — return a valid empty payload rather than an error so
         // the frontend shows "no data" rather than a fallback to mock data.
-        return Ok(ClaudeStats {
+        return Ok(ProviderStats {
             daily_usage: Vec::new(),
             model_stats: Vec::new(),
             project_stats: Vec::new(),
@@ -855,7 +846,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         .map_err(|e| format!("sessions dir: {e}"))?;
     for year_entry in year_dirs.flatten() {
         let year_path = year_entry.path();
-        if !year_path.is_dir() { continue; }
+        if !year_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
         let Some(year_name) = year_path.file_name().and_then(|s| s.to_str()) else { continue };
         if year_name.len() != 4 || !year_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -868,7 +859,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         let Ok(month_dirs) = std::fs::read_dir(&year_path) else { continue };
         for month_entry in month_dirs.flatten() {
             let month_path = month_entry.path();
-            if !month_path.is_dir() { continue; }
+            if !month_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
             let Some(month_name) = month_path.file_name().and_then(|s| s.to_str()) else { continue };
             if month_name.len() != 2 || !month_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -881,7 +872,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
             let Ok(day_dirs) = std::fs::read_dir(&month_path) else { continue };
             for day_entry in day_dirs.flatten() {
                 let day_path = day_entry.path();
-                if !day_path.is_dir() { continue; }
+                if !day_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
                 let Some(day_name) = day_path.file_name().and_then(|s| s.to_str()) else { continue };
                 if day_name.len() != 2 || !day_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -953,31 +944,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         .collect();
 
     // Trend: last 7 days vs previous 7, computed on the full in-window dataset.
-    let trend_pct: Option<f64> = {
-        let n = daily_usage.len();
-        if n >= 7 {
-            let last7: u64 = daily_usage[n - 7..]
-                .iter()
-                .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
-                .sum();
-            let prev7: u64 = if n >= 14 {
-                daily_usage[n - 14..n - 7]
-                    .iter()
-                    .map(|d| d.input_tokens + d.output_tokens + d.cache_tokens)
-                    .sum()
-            } else {
-                0
-            };
-            if prev7 > 0 {
-                #[allow(clippy::cast_precision_loss)]
-                Some(((last7 as f64 - prev7 as f64) / prev7 as f64) * 100.0)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    };
+    let trend_pct = compute_trend_pct(&daily_usage);
 
     // Per-model stats, sorted by total tokens descending. Codex logs no cost.
     let mut model_stats: Vec<ModelStat> = models
@@ -990,18 +957,14 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
             cost_usd: 0.0,
         })
         .collect();
-    model_stats.sort_by(|a, b| {
-        let ta = a.input_tokens + a.output_tokens + a.cache_tokens;
-        let tb = b.input_tokens + b.output_tokens + b.cache_tokens;
-        tb.cmp(&ta)
-    });
+    sort_model_stats_by_tokens(&mut model_stats);
 
     // Slice daily_usage to the requested window before returning.
     // trend_pct was computed on the full trend_window dataset above.
     let start = daily_usage.len().saturating_sub(window as usize);
     let daily_usage = daily_usage[start..].to_vec();
 
-    Ok(ClaudeStats {
+    Ok(ProviderStats {
         daily_usage,
         model_stats,
         project_stats: Vec::new(),

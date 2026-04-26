@@ -61,7 +61,7 @@ const mockRefresh = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
-  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd, autoLaunchEnabled, setAutoLaunchEnabled } = useAppStore(
+  const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd, setBudgetLimit, autoLaunchEnabled, setAutoLaunchEnabled } = useAppStore(
     useShallow((s) => ({
       provider: s.provider,
       setProvider: s.setProvider,
@@ -72,6 +72,7 @@ export function Dashboard() {
       closeSettings: s.closeSettings,
       resetPreferences: s.resetPreferences,
       budgetLimitUsd: s.budgetLimitUsd,
+      setBudgetLimit: s.setBudgetLimit,
       autoLaunchEnabled: s.autoLaunchEnabled,
       setAutoLaunchEnabled: s.setAutoLaunchEnabled,
     }))
@@ -601,7 +602,7 @@ export function Dashboard() {
           themeColor={providerData.themeColor}
           onResetPreferences={handleResetPreferences}
           budgetLimitUsd={budgetLimitUsd}
-          onSetBudgetLimit={useAppStore.getState().setBudgetLimit}
+          onSetBudgetLimit={setBudgetLimit}
           autoLaunchEnabled={autoLaunchEnabled}
           onToggleAutoLaunch={handleToggleAutoLaunch}
         />

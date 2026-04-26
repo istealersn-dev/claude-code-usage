@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Key, DollarSign, Palette, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SettingsTab = "api-keys" | "budget" | "appearance" | "storage";
 
-const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
+const SETTINGS_TABS: { id: SettingsTab; label: string; icon: ElementType }[] = [
   { id: "api-keys", label: "API Keys", icon: Key },
   { id: "budget", label: "Budget", icon: DollarSign },
   { id: "appearance", label: "Appearance", icon: Palette },
@@ -85,13 +85,11 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
                 <p className="text-[10px] text-gray-400">
                   Claude Code reads data locally — no API key needed. Keys are required for Codex and Gemini (coming soon).
                 </p>
-                {/* Issue 3: typed constant, no loose cast */}
                 {COMING_SOON_PROVIDERS.map((p) => (
                   <div key={p.label}>
                     <label className="text-[10px] uppercase text-gray-400 tracking-wider block mb-1">
                       {p.label} API Key
                     </label>
-                    {/* Issue 4: readOnly + aria-disabled instead of disabled */}
                     <input
                       type="password"
                       placeholder={p.placeholder}
@@ -162,7 +160,6 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
                 <p className="text-[10px] text-gray-400 leading-relaxed">
                   AI Pulse reads data directly from local AI assistant files — it stores no data of its own except your settings preferences.
                 </p>
-                {/* Issue 1: delegate to scoped reset action from store */}
                 <button
                   onClick={onResetPreferences}
                   className="w-full px-3 py-2 text-xs font-medium bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-lg transition-colors border border-red-900/50"
