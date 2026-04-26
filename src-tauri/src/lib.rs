@@ -501,10 +501,17 @@ fn get_claude_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     // this result without a second walk, regardless of the requested window.
     let session_data = aggregate_claude_sessions(days.unwrap_or(30).clamp(30, 365));
 
-    // Build daily usage entries — sort by ISO date then keep the last 30 days.
+    // Build daily usage entries keyed by ISO date so we can merge stats-cache
+    // and JSONL-only days, then sort chronologically before formatting labels.
     let mut daily = cache.daily_model_tokens;
     daily.sort_by(|a, b| a.date.cmp(&b.date));
-    let mut entries: Vec<DailyUsage> = daily
+
+    // Track which ISO dates are already covered by the stats-cache.
+    let cache_dates: std::collections::HashSet<String> =
+        daily.iter().map(|d| d.date.clone()).collect();
+
+    // (iso_date, DailyUsage) — sorted by ISO date at the end.
+    let mut raw: Vec<(String, DailyUsage)> = daily
         .iter()
         .map(|day| {
             let (inp, out, cac) = if let Some(&(i, o, c)) = session_data.get(&day.date) {
@@ -523,13 +530,33 @@ fn get_claude_stats(days: Option<u32>) -> Result<ProviderStats, String> {
                     (total, 0, 0)
                 }
             };
-            DailyUsage {
-                date: format_date_label(&day.date),
+            (day.date.clone(), DailyUsage {
+                date: String::new(), // filled after sort
                 input_tokens: inp,
                 output_tokens: out,
                 cache_tokens: cac,
-            }
+            })
         })
+        .collect();
+
+    // Include dates present in JSONL but absent from stats-cache (e.g. when
+    // stats-cache hasn't been recomputed since the last session).
+    for (date, &(inp, out, cac)) in &session_data {
+        if !cache_dates.contains(date) {
+            raw.push((date.clone(), DailyUsage {
+                date: String::new(),
+                input_tokens: inp,
+                output_tokens: out,
+                cache_tokens: cac,
+            }));
+        }
+    }
+
+    // Sort by ISO date, then apply formatted labels.
+    raw.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut entries: Vec<DailyUsage> = raw
+        .into_iter()
+        .map(|(iso, mut d)| { d.date = format_date_label(&iso); d })
         .collect();
 
     // Trend: % change in total tokens, last 7 days vs previous 7 days.
