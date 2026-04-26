@@ -482,6 +482,9 @@ export function Dashboard() {
                   <Box className="w-3 h-3" /> Models
                 </button>
               </div>
+              <span className="text-[9px] text-gray-500 uppercase tracking-wider">
+                {viewMode === "projects" ? "Token share by project" : "Token share by model"}
+              </span>
             </div>
 
             <div className="bg-[#001d3d]/20 rounded-xl p-2 sm:p-3 border border-[#003566]/30 h-[200px] overflow-y-auto custom-scrollbar">
