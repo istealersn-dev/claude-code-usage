@@ -19,8 +19,6 @@ use std::time::{Duration, Instant};
 use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{Emitter, Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
 
-#[cfg(target_os = "macos")]
-
 /// Width of the menubar popup window in logical pixels — must match `tauri.conf.json`.
 const WIN_WIDTH_PX: f64 = 440.0;
 
@@ -93,6 +91,7 @@ struct SessionMessage {
     usage: Option<SessionUsage>,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(serde::Deserialize)]
 struct SessionUsage {
     #[serde(default)]
@@ -111,10 +110,7 @@ struct SessionUsage {
 ///
 /// Files are pre-filtered by `mtime` so only recent session files are opened.
 fn aggregate_claude_sessions(days: u32) -> HashMap<String, (u64, u64, u64)> {
-    let root = match claude_projects_path() {
-        Some(p) => p,
-        None => return HashMap::new(),
-    };
+    let Some(root) = claude_projects_path() else { return HashMap::new(); };
     aggregate_claude_sessions_at(&root, days)
 }
 
@@ -126,23 +122,17 @@ fn aggregate_claude_sessions_at(projects_root: &std::path::Path, days: u32) -> H
         .checked_sub(Duration::from_secs(u64::from(days) * 86_400))
         .unwrap_or(std::time::UNIX_EPOCH);
 
-    let project_dirs = match std::fs::read_dir(projects_root) {
-        Ok(d) => d,
-        Err(_) => return daily,
-    };
+    let Ok(project_dirs) = std::fs::read_dir(projects_root) else { return daily; };
 
     for proj_entry in project_dirs.flatten() {
         // Use file_type() — unlike is_dir(), it does NOT follow symlinks.
-        let ft = match proj_entry.file_type() { Ok(t) => t, Err(_) => continue };
+        let Ok(ft) = proj_entry.file_type() else { continue };
         if !ft.is_dir() {
             continue;
         }
         let proj_path = proj_entry.path();
 
-        let session_files = match std::fs::read_dir(&proj_path) {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
+        let Ok(session_files) = std::fs::read_dir(&proj_path) else { continue };
 
         for file_entry in session_files.flatten() {
             let file_path = file_entry.path();
@@ -150,7 +140,7 @@ fn aggregate_claude_sessions_at(projects_root: &std::path::Path, days: u32) -> H
                 .file_name()
                 .and_then(|f| f.to_str())
                 .unwrap_or("");
-            if !fname.ends_with(".jsonl") {
+            if !std::path::Path::new(fname).extension().is_some_and(|e| e.eq_ignore_ascii_case("jsonl")) {
                 continue;
             }
 
@@ -163,31 +153,19 @@ fn aggregate_claude_sessions_at(projects_root: &std::path::Path, days: u32) -> H
                 }
             }
 
-            let content = match std::fs::read_to_string(&file_path) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
+            let Ok(content) = std::fs::read_to_string(&file_path) else { continue };
 
             for line in content.lines() {
                 if line.is_empty() {
                     continue;
                 }
-                let msg: SessionLine = match serde_json::from_str(line) {
-                    Ok(m) => m,
-                    Err(_) => continue,
-                };
+                let Ok(msg) = serde_json::from_str::<SessionLine>(line) else { continue };
                 if msg.kind != "assistant" {
                     continue;
                 }
                 // Resolve usage from top-level (older format) or message.usage (newer format).
-                let usage = match msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) {
-                    Some(u) => u,
-                    None => continue,
-                };
-                let ts = match msg.timestamp {
-                    Some(t) => t,
-                    None => continue,
-                };
+                let Some(usage) = msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) else { continue };
+                let Some(ts) = msg.timestamp else { continue };
                 // ISO timestamp: "2026-04-18T20:11:33.757Z" → take first 10 chars
                 let date = ts.get(..10).unwrap_or("").to_string();
                 if date.is_empty() {
@@ -216,8 +194,7 @@ fn project_display_name(dir_name: &str) -> String {
     fn last_dash_segment(s: &str) -> String {
         s.trim_start_matches('-')
             .split('-')
-            .filter(|p| !p.is_empty())
-            .last()
+            .rfind(|p| !p.is_empty())
             .unwrap_or(s)
             .to_string()
     }
@@ -272,10 +249,7 @@ pub struct ProjectStat {
 /// across all session JSONL files whose mtime falls within the last `days` days.
 /// Skips temp/worktree directories (those not rooted in `$HOME`).
 fn aggregate_claude_projects(days: u32) -> Vec<ProjectStat> {
-    let projects_root = match claude_projects_path() {
-        Some(p) => p,
-        None => return vec![],
-    };
+    let Some(projects_root) = claude_projects_path() else { return vec![]; };
     let Ok(home) = std::env::var("HOME") else { return vec![]; };
     let home_encoded = format!("-{}", home.trim_start_matches('/').replace('/', "-"));
 
@@ -283,10 +257,7 @@ fn aggregate_claude_projects(days: u32) -> Vec<ProjectStat> {
         .checked_sub(Duration::from_secs(u64::from(days) * 86_400))
         .unwrap_or(std::time::UNIX_EPOCH);
 
-    let project_dirs = match std::fs::read_dir(&projects_root) {
-        Ok(d) => d,
-        Err(_) => return vec![],
-    };
+    let Ok(project_dirs) = std::fs::read_dir(&projects_root) else { return vec![]; };
 
     let mut stats: Vec<ProjectStat> = project_dirs
         .flatten()
@@ -308,7 +279,7 @@ fn aggregate_claude_projects(days: u32) -> Vec<ProjectStat> {
             for file_entry in std::fs::read_dir(&proj_path).ok()?.flatten() {
                 let file_path = file_entry.path();
                 let fname = file_path.file_name().and_then(|f| f.to_str()).unwrap_or("");
-                if !fname.ends_with(".jsonl") {
+                if !std::path::Path::new(fname).extension().is_some_and(|e| e.eq_ignore_ascii_case("jsonl")) {
                     continue;
                 }
                 if let Ok(meta) = file_path.metadata() {
@@ -318,25 +289,16 @@ fn aggregate_claude_projects(days: u32) -> Vec<ProjectStat> {
                         }
                     }
                 }
-                let content = match std::fs::read_to_string(&file_path) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
+                let Ok(content) = std::fs::read_to_string(&file_path) else { continue };
                 for line in content.lines() {
                     if line.is_empty() {
                         continue;
                     }
-                    let msg: SessionLine = match serde_json::from_str(line) {
-                        Ok(m) => m,
-                        Err(_) => continue,
-                    };
+                    let Ok(msg) = serde_json::from_str::<SessionLine>(line) else { continue };
                     if msg.kind != "assistant" {
                         continue;
                     }
-                    let usage = match msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) {
-                        Some(u) => u,
-                        None => continue,
-                    };
+                    let Some(usage) = msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) else { continue };
                     tokens += usage.input_tokens + usage.output_tokens;
                 }
             }
@@ -453,7 +415,7 @@ fn compute_trend_pct(entries: &[DailyUsage]) -> Option<f64> {
     Some(((last7 as f64 - prev7 as f64) / prev7 as f64) * 100.0)
 }
 
-fn sort_model_stats_by_tokens(stats: &mut Vec<ModelStat>) {
+fn sort_model_stats_by_tokens(stats: &mut [ModelStat]) {
     stats.sort_by_key(|m| std::cmp::Reverse(m.input_tokens + m.output_tokens + m.cache_tokens));
 }
 
@@ -474,7 +436,7 @@ const HAIKU_OUTPUT: f64 = 4.0;
 const HAIKU_CR:     f64 = 0.08;
 const HAIKU_CW:     f64 = 1.00;
 
-/// USD per million tokens: (input, output, cache_read, cache_write).
+/// USD per million tokens: (input, output, `cache_read`, `cache_write`).
 /// Matched by substring so new model versions are covered automatically.
 fn model_pricing_per_mtok(name: &str) -> (f64, f64, f64, f64) {
     let n = name.to_lowercase();
@@ -535,8 +497,9 @@ fn get_claude_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     let cum_total = cum_input + cum_output + cum_cache;
 
     // Aggregate real per-type token counts from session JSONL files.
-    // Falls back to the cumulative-ratio estimate for days missing from JSONL.
-    let session_data = aggregate_claude_sessions(days.unwrap_or(30));
+    // Always fetch at least 30 days so the projected-cost block can reuse
+    // this result without a second walk, regardless of the requested window.
+    let session_data = aggregate_claude_sessions(days.unwrap_or(30).clamp(30, 365));
 
     // Build daily usage entries — sort by ISO date then keep the last 30 days.
     let mut daily = cache.daily_model_tokens;
@@ -593,11 +556,8 @@ fn get_claude_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     let projected_monthly_cost_usd: Option<f64> = if lifetime_tokens > 0 && total_cost_usd > 0.0 {
         #[allow(clippy::cast_precision_loss)]
         let cost_per_token = total_cost_usd / lifetime_tokens as f64;
-        let tokens_30d: u64 = if days.unwrap_or(30) >= 30 {
-            session_data.values().map(|(i, o, c)| i + o + c).sum()
-        } else {
-            aggregate_claude_sessions(30).values().map(|(i, o, c)| i + o + c).sum()
-        };
+        // session_data was fetched for at least 30 days above — always reuse it.
+        let tokens_30d: u64 = session_data.values().map(|(i, o, c)| i + o + c).sum();
         #[allow(clippy::cast_precision_loss)]
         if tokens_30d > 0 { Some(tokens_30d as f64 * cost_per_token) } else { None }
     } else {
@@ -810,7 +770,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
     // Per-model cumulative token totals — local helper struct.
     struct ModelAccum { input: u64, output: u64, cache: u64 }
 
-    let window = days.unwrap_or(30).max(1).min(365);
+    let window = days.unwrap_or(30).clamp(1, 365);
     let root = codex_sessions_path().ok_or_else(|| "HOME/CODEX_HOME not set".to_string())?;
 
     if !root.exists() {
@@ -846,7 +806,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
         .map_err(|e| format!("sessions dir: {e}"))?;
     for year_entry in year_dirs.flatten() {
         let year_path = year_entry.path();
-        if !year_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
+        if !year_entry.file_type().is_ok_and(|ft| ft.is_dir()) { continue; }
         let Some(year_name) = year_path.file_name().and_then(|s| s.to_str()) else { continue };
         if year_name.len() != 4 || !year_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -859,7 +819,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
         let Ok(month_dirs) = std::fs::read_dir(&year_path) else { continue };
         for month_entry in month_dirs.flatten() {
             let month_path = month_entry.path();
-            if !month_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
+            if !month_entry.file_type().is_ok_and(|ft| ft.is_dir()) { continue; }
             let Some(month_name) = month_path.file_name().and_then(|s| s.to_str()) else { continue };
             if month_name.len() != 2 || !month_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -872,7 +832,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
             let Ok(day_dirs) = std::fs::read_dir(&month_path) else { continue };
             for day_entry in day_dirs.flatten() {
                 let day_path = day_entry.path();
-                if !day_entry.file_type().map_or(false, |ft| ft.is_dir()) { continue; }
+                if !day_entry.file_type().is_ok_and(|ft| ft.is_dir()) { continue; }
                 let Some(day_name) = day_path.file_name().and_then(|s| s.to_str()) else { continue };
                 if day_name.len() != 2 || !day_name.chars().all(|c| c.is_ascii_digit()) { continue; }
 
@@ -977,7 +937,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
 
 // ── Auto-launch IPC commands ──────────────────────────────────────────────────
 
-/// Enables or disables the "launch at login" LaunchAgent for AI Pulse.
+/// Enables or disables the "launch at login" `LaunchAgent` for AI Pulse.
 ///
 /// Delegates to the `tauri-plugin-autostart` plugin, which on macOS installs a
 /// `LaunchAgent` plist under `~/Library/LaunchAgents/`. The agent starts the
@@ -986,6 +946,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ProviderStats, String> {
 /// Returns an error string if the underlying plugin call fails (e.g. file-
 /// system write failure). The frontend logs this to the console in DEV.
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 fn toggle_autolaunch(app: tauri::AppHandle, enable: bool) -> Result<(), String> {
     use tauri_plugin_autostart::ManagerExt;
     if enable {
@@ -995,10 +956,11 @@ fn toggle_autolaunch(app: tauri::AppHandle, enable: bool) -> Result<(), String> 
     }
 }
 
-/// Returns true if the "launch at login" LaunchAgent is currently registered
+/// Returns true if the "launch at login" `LaunchAgent` is currently registered
 /// for AI Pulse. Used on frontend mount to sync the Zustand toggle state with
 /// the actual OS state.
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 fn is_autolaunch_enabled(app: tauri::AppHandle) -> Result<bool, String> {
     use tauri_plugin_autostart::ManagerExt;
     app.autolaunch().is_enabled().map_err(|e| e.to_string())
@@ -1182,7 +1144,6 @@ pub fn run() {
             // "codex-stats-updated" so the frontend re-fetches live.
             if let Some(codex_watch_path) = codex_sessions_path() {
                 if codex_watch_path.exists() {
-                {
                     let app_handle = app.handle().clone();
                     tauri::async_runtime::spawn(async move {
                         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
@@ -1216,7 +1177,6 @@ pub fn run() {
                             }
                         }
                     });
-                } // end inner scope (app_handle borrow)
                 } // end if codex_watch_path.exists()
             }
 

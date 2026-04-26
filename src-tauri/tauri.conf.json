@@ -12,7 +12,10 @@
   "bundle": {
     "active": true,
     "targets": ["dmg", "app"],
-    "icon": ["icons/icon.png"]
+    "icon": ["icons/icon.png"],
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    }
   },
   "app": {
     "macOSPrivateApi": true,

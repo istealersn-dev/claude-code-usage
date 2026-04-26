@@ -4,27 +4,14 @@ import { z } from "zod";
 import type { UsageData, ModelUsage } from "./data";
 import { DEFAULT_TIMEFRAME, TIMEFRAME_DAYS } from "./store";
 import type { Timeframe } from "./store";
+import { RawDailyUsageSchema, RawModelStatSchema, RawProjectStatSchema } from "./ipcSchemas";
 
-// ── Zod schemas for IPC boundary validation ───────────────────────────────────
-
-const RawDailyUsageSchema = z.object({
-  date: z.string(),
-  input_tokens: z.number(),
-  output_tokens: z.number(),
-  cache_tokens: z.number(),
-});
-
-const RawModelStatSchema = z.object({
-  name: z.string(),
-  input_tokens: z.number(),
-  output_tokens: z.number(),
-  cache_tokens: z.number(),
-  cost_usd: z.number(),
-});
-
+// Codex returns the same ProviderStats shape from Rust — cost_usd and
+// projected_monthly_cost_usd are always 0/null (Codex CLI logs no USD cost).
 const RawCodexStatsSchema = z.object({
   daily_usage: z.array(RawDailyUsageSchema),
   model_stats: z.array(RawModelStatSchema),
+  project_stats: z.array(RawProjectStatSchema),
   total_sessions: z.number(),
   total_cost_usd: z.number(),
   trend_pct: z.number().nullable(),

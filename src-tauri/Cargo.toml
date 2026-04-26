@@ -18,7 +18,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["time", "sync"] }
 objc2 = "0.6.4"
-# macos_kqueue: lighter than FSEvents for single-file watching; no recursive directory scan needed
+# macos_kqueue: lighter than FSEvents; supports both single-file and recursive directory watching
 notify = { version = "6", features = ["macos_kqueue"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"

@@ -139,9 +139,18 @@ export function Dashboard() {
     if (provider === "codex") return codexUsageData ?? providerData.usageData;
     return mockRefreshData?.provider === provider ? mockRefreshData.usageData : providerData.usageData;
   })();
-  const contextUsage = provider !== "claude" && provider !== "codex" && mockRefreshData?.provider === provider
-    ? mockRefreshData.contextUsage
-    : providerData.currentUsage;
+  // For real providers drive the gauge from the most recent day's token burn
+  // so it reflects actual usage rather than a hardcoded constant.
+  const contextUsage = (() => {
+    if (provider === "claude" || provider === "codex") {
+      const last = usageData[usageData.length - 1];
+      return last ? last.inputTokens + last.outputTokens + last.cacheTokens : 0;
+    }
+    return mockRefreshData?.provider === provider
+      ? mockRefreshData.contextUsage
+      : providerData.currentUsage;
+  })();
+
   const displayModelUsage = (() => {
     if (provider === "claude") return realModelUsage ?? providerData.modelUsage;
     if (provider === "codex") return realCodexModelUsage ?? providerData.modelUsage;
@@ -149,13 +158,13 @@ export function Dashboard() {
   })();
 
   const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
-  const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
 
   const ProviderIcon = PROVIDER_ICONS[provider];
 
   const getCostLabel = () => {
     if (provider === "claude") return claudeTotalCost !== null ? `$${claudeTotalCost.toFixed(2)} lifetime` : "—";
     if (provider === "codex") return codexTotalCost !== null ? `$${codexTotalCost.toFixed(2)} lifetime` : "—";
+    const totalCost = providerData.projectUsage.reduce((acc, curr) => acc + curr.cost, 0);
     return `$${totalCost.toFixed(2)} this month`;
   };
 
@@ -423,7 +432,9 @@ export function Dashboard() {
                   <LiquidGauge percentage={contextPercentage} isError={!!error} color={providerData.themeColor} darkColor={providerData.themeDark} />
                </div>
                <div className="mt-2 text-center">
-                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Context Limit</p>
+                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">
+                   {isRealDataProvider ? "Today's Usage" : "Context Limit"}
+                 </p>
                  <p className="text-xs font-mono text-white">
                    {(contextUsage / 1000).toFixed(0)}k / {(providerData.contextLimit / 1000).toFixed(0)}k
                  </p>

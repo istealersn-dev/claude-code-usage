@@ -4,28 +4,7 @@ import { z } from "zod";
 import type { UsageData, ModelUsage } from "./data";
 import { DEFAULT_TIMEFRAME, TIMEFRAME_DAYS } from "./store";
 import type { Timeframe } from "./store";
-
-// ── Zod schemas for IPC boundary validation ───────────────────────────────────
-
-const RawDailyUsageSchema = z.object({
-  date: z.string(),
-  input_tokens: z.number(),
-  output_tokens: z.number(),
-  cache_tokens: z.number(),
-});
-
-const RawModelStatSchema = z.object({
-  name: z.string(),
-  input_tokens: z.number(),
-  output_tokens: z.number(),
-  cache_tokens: z.number(),
-  cost_usd: z.number(),
-});
-
-const RawProjectStatSchema = z.object({
-  name: z.string(),
-  tokens: z.number(),
-});
+import { RawDailyUsageSchema, RawModelStatSchema, RawProjectStatSchema } from "./ipcSchemas";
 
 const RawClaudeStatsSchema = z.object({
   daily_usage: z.array(RawDailyUsageSchema),
