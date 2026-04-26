@@ -11,3 +11,6 @@ _code-review/
 .superpowers/
 docs/superpowers/
 src-tauri/gen/schemas/
+PRD.md
+MIGRATION_PLAN.md
+Design_System.md
