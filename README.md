@@ -19,6 +19,25 @@
 
 Reads directly from local session files — no API keys, no network calls, no data leaves your machine.
 
+## Download
+
+Pre-built binaries are published with each release. Head to **[Releases](https://github.com/istealersn-dev/ai-pulse/releases/latest)** and download the `.dmg` for your Mac.
+
+1. Open the `.dmg` and drag **AI Pulse** to Applications
+2. First launch: right-click → **Open** to bypass the Gatekeeper prompt
+
+> Requires macOS 13 Ventura or later.
+
+### Platform support
+
+| Platform | Status |
+|---|---|
+| macOS 13+ | ✓ Available |
+| Windows | Coming soon |
+| Linux | Coming soon |
+
+---
+
 ## Features
 
 - **Token usage chart** — area chart of input/output tokens over 1D / 3D / 7D / 30D
@@ -34,7 +53,9 @@ Reads directly from local session files — no API keys, no network calls, no da
 
 ---
 
-## Requirements
+## Building from Source
+
+If you'd prefer to build locally instead of downloading a release binary:
 
 | Dependency | Version |
 |---|---|
