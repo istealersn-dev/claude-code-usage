@@ -534,19 +534,34 @@ export function Dashboard() {
                     transition={{ duration: 0.2 }}
                     className="space-y-1 sm:space-y-2"
                   >
-                    {displayModelUsage.map((model) => (
-                      <div key={model.name} className="flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
-                          <span className="text-gray-300 group-hover:text-white transition-colors">
-                            {model.name}
-                          </span>
-                        </div>
-                        <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
-                          {model.cost === 0 ? "—" : `$${model.cost.toFixed(2)}`}
-                        </span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const totalTokens = displayModelUsage.reduce((sum, m) => sum + m.tokens, 0);
+                      return displayModelUsage.map((model) => {
+                        const barPct = totalTokens > 0 ? (model.tokens / totalTokens) * 100 : 0;
+                        const tokenLabel = model.tokens >= 1_000_000
+                          ? `${(model.tokens / 1_000_000).toFixed(1)}M`
+                          : model.tokens >= 1_000
+                          ? `${Math.round(model.tokens / 1_000)}k`
+                          : String(model.tokens);
+                        return (
+                          <div key={model.name} className="flex flex-col gap-1 p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors cursor-pointer group">
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-2 text-[10px] sm:text-xs">
+                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: providerData.themeColor }} />
+                                <span className="text-gray-300 group-hover:text-white transition-colors">{model.name}</span>
+                              </div>
+                              <span className="text-[9px] font-mono text-gray-500 group-hover:text-gray-300 transition-colors">{tokenLabel}</span>
+                            </div>
+                            <div className="h-[3px] bg-[#001d3d] rounded-full overflow-hidden ml-3.5">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${barPct}%`, backgroundColor: providerData.themeColor, opacity: 0.65 }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </motion.div>
                 )}
               </AnimatePresence>
