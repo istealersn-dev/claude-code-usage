@@ -44,11 +44,12 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
   const mockTotalTokens = providerData.projectUsage.reduce((acc, curr) => acc + curr.tokens, 0);
   const totalTokens = liveTotalTokens ?? mockTotalTokens;
   return (
-    <div className="min-h-screen bg-[#000814] flex items-start justify-center p-4 sm:p-6">
+    <div className="h-full bg-[#000814] flex flex-col">
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-5xl bg-[#000814] border border-[#003566] rounded-2xl shadow-2xl flex flex-col overflow-hidden text-white"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.15 }}
+        className="w-full flex-1 flex flex-col overflow-hidden text-white"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#003566] bg-[#001d3d]/30">
@@ -159,7 +160,7 @@ export function DetailedReport({ provider, onClose }: DetailedReportProps) {
                         <h4 className="text-base font-medium font-mono" style={{ color: providerData.themeColor }}>{model.name}</h4>
                         <span className="text-xs font-mono text-gray-400">{(model.totalTokens / 1_000_000).toFixed(1)}M total</span>
                       </div>
-                      <div className="grid grid-cols-4 gap-4 mb-4">
+                      <div className="grid grid-cols-2 gap-4 mb-4">
                         <div>
                           <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Input</p>
                           <p className="text-sm font-mono text-white">{(model.inputTokens / 1000).toFixed(0)}k</p>
