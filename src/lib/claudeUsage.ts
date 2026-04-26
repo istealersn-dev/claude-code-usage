@@ -39,15 +39,6 @@ const RawClaudeStatsSchema = z.object({
 
 // ── Mapped result ─────────────────────────────────────────────────────────────
 
-export interface ModelDetail {
-  name: string;
-  inputTokens: number;
-  outputTokens: number;
-  cacheTokens: number;
-  totalTokens: number;
-  costUsd: number;
-}
-
 export interface ProjectStat {
   name: string;
   tokens: number;
@@ -56,7 +47,6 @@ export interface ProjectStat {
 export interface ClaudeUsageResult {
   usageData: UsageData[];
   modelUsage: ModelUsage[];
-  modelDetails: ModelDetail[];
   projectStats: ProjectStat[];
   totalTokens: number;
   totalSessions: number;
@@ -83,26 +73,16 @@ export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME)
 
   let totalTokens = 0;
   const modelUsage: ModelUsage[] = [];
-  const modelDetails: ModelDetail[] = [];
 
   for (const m of raw.model_stats) {
     const total = m.input_tokens + m.output_tokens + m.cache_tokens;
     totalTokens += total;
     modelUsage.push({ name: m.name, tokens: total, cost: m.cost_usd });
-    modelDetails.push({
-      name: m.name,
-      inputTokens: m.input_tokens,
-      outputTokens: m.output_tokens,
-      cacheTokens: m.cache_tokens,
-      totalTokens: total,
-      costUsd: m.cost_usd,
-    });
   }
 
   return {
     usageData,
     modelUsage,
-    modelDetails,
     projectStats: raw.project_stats,
     totalTokens,
     totalSessions: raw.total_sessions,

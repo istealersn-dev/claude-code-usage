@@ -11,9 +11,45 @@ import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult, ProjectStat } from "@/lib/claudeUsage";
 import type { CodexUsageResult } from "@/lib/codexUsage";
 import { invoke } from "@tauri-apps/api/core";
-import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles, Settings, ChevronDown } from "lucide-react";
+import { AlertTriangle, Box, ChevronDown, Code2, DollarSign, Layers, RefreshCw, Settings, Sparkles, TrendingUp, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsModal } from "./SettingsModal";
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
+}
+
+interface TokenUsageRowProps {
+  name: string;
+  tokens: number;
+  totalTokens: number;
+  themeColor: string;
+}
+
+function TokenUsageRow({ name, tokens, totalTokens, themeColor }: TokenUsageRowProps) {
+  const barPct = totalTokens > 0 ? (tokens / totalTokens) * 100 : 0;
+  return (
+    <div className="flex flex-col gap-1 p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors cursor-pointer group">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs">
+          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: themeColor }} />
+          <span className="text-gray-300 group-hover:text-white transition-colors truncate max-w-[180px]">{name}</span>
+        </div>
+        <span className="text-[9px] font-mono text-gray-500 group-hover:text-gray-300 transition-colors shrink-0">
+          {formatTokenCount(tokens)}
+        </span>
+      </div>
+      <div className="h-[3px] bg-[#001d3d] rounded-full overflow-hidden ml-3.5">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${barPct}%`, backgroundColor: themeColor, opacity: 0.65 }}
+        />
+      </div>
+    </div>
+  );
+}
 
 const PROVIDER_ICONS: Record<Provider, React.ElementType> = {
   claude: Zap,
@@ -152,8 +188,8 @@ export function Dashboard() {
 
   const handleResetPreferences = useCallback(() => {
     invoke<void>("toggle_autolaunch", { enable: false })
-      .catch(() => {})
-      .then(() => resetPreferences());
+      .then(() => resetPreferences())
+      .catch(() => setError("Reset failed — auto-launch may still be active"));
   }, [resetPreferences]);
 
   // Fetch real Claude stats — setState only in async callbacks, never synchronously.
@@ -300,9 +336,9 @@ export function Dashboard() {
                   aria-label="Select provider"
                   className="bg-transparent text-[10px] font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none pr-4 text-gray-400 hover:text-white transition-colors"
                 >
-                  <option value="claude">Claude</option>
-                  <option value="codex">Codex</option>
-                  <option value="gemini">Gemini</option>
+                  {(Object.keys(PROVIDERS) as Provider[]).map((p) => (
+                    <option key={p} value={p}>{PROVIDERS[p].name}</option>
+                  ))}
                 </select>
                 <ChevronDown className="w-2.5 h-2.5 text-gray-500 absolute right-0 pointer-events-none" />
               </div>
@@ -374,7 +410,7 @@ export function Dashboard() {
 
         {provider === "claude" && claudeTotalCost !== null && budgetLimitUsd !== null && claudeTotalCost > budgetLimitUsd && (
           <div className="shrink-0 bg-red-900/40 border-b border-red-700/50 px-4 py-1.5 text-[10px] text-red-300 flex items-center gap-2">
-            <span>⚠</span>
+            <AlertTriangle className="w-3 h-3 shrink-0" />
             <span>Lifetime spend ${claudeTotalCost.toFixed(2)} exceeds budget ${budgetLimitUsd.toFixed(2)}</span>
           </div>
         )}
@@ -501,31 +537,15 @@ export function Dashboard() {
                     {provider === "claude" && realProjectUsage !== null ? (
                       (() => {
                         const totalTokens = realProjectUsage.reduce((sum, p) => sum + p.tokens, 0);
-                        return realProjectUsage.map((project) => {
-                          const barPct = totalTokens > 0 ? (project.tokens / totalTokens) * 100 : 0;
-                          const tokenLabel = project.tokens >= 1_000_000
-                            ? `${(project.tokens / 1_000_000).toFixed(1)}M`
-                            : project.tokens >= 1_000
-                            ? `${Math.round(project.tokens / 1_000)}k`
-                            : String(project.tokens);
-                          return (
-                            <div key={project.name} className="flex flex-col gap-1 p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors cursor-pointer group">
-                              <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-                                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: providerData.themeColor }} />
-                                  <span className="text-gray-300 group-hover:text-white transition-colors truncate max-w-[180px]">{project.name}</span>
-                                </div>
-                                <span className="text-[9px] font-mono text-gray-500 group-hover:text-gray-300 transition-colors shrink-0">{tokenLabel}</span>
-                              </div>
-                              <div className="h-[3px] bg-[#001d3d] rounded-full overflow-hidden ml-3.5">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{ width: `${barPct}%`, backgroundColor: providerData.themeColor, opacity: 0.65 }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        });
+                        return realProjectUsage.map((project) => (
+                          <TokenUsageRow
+                            key={project.name}
+                            name={project.name}
+                            tokens={project.tokens}
+                            totalTokens={totalTokens}
+                            themeColor={providerData.themeColor}
+                          />
+                        ));
                       })()
                     ) : provider === "claude" ? (
                       <p className="text-[10px] text-gray-500 text-center py-6">Loading project data…</p>
@@ -558,31 +578,15 @@ export function Dashboard() {
                   >
                     {(() => {
                       const totalTokens = displayModelUsage.reduce((sum, m) => sum + m.tokens, 0);
-                      return displayModelUsage.map((model) => {
-                        const barPct = totalTokens > 0 ? (model.tokens / totalTokens) * 100 : 0;
-                        const tokenLabel = model.tokens >= 1_000_000
-                          ? `${(model.tokens / 1_000_000).toFixed(1)}M`
-                          : model.tokens >= 1_000
-                          ? `${Math.round(model.tokens / 1_000)}k`
-                          : String(model.tokens);
-                        return (
-                          <div key={model.name} className="flex flex-col gap-1 p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors cursor-pointer group">
-                            <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: providerData.themeColor }} />
-                                <span className="text-gray-300 group-hover:text-white transition-colors">{model.name}</span>
-                              </div>
-                              <span className="text-[9px] font-mono text-gray-500 group-hover:text-gray-300 transition-colors">{tokenLabel}</span>
-                            </div>
-                            <div className="h-[3px] bg-[#001d3d] rounded-full overflow-hidden ml-3.5">
-                              <div
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{ width: `${barPct}%`, backgroundColor: providerData.themeColor, opacity: 0.65 }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      });
+                      return displayModelUsage.map((model) => (
+                        <TokenUsageRow
+                          key={model.name}
+                          name={model.name}
+                          tokens={model.tokens}
+                          totalTokens={totalTokens}
+                          themeColor={providerData.themeColor}
+                        />
+                      ));
                     })()}
                   </motion.div>
                 )}

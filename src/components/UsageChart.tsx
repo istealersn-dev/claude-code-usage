@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   AreaChart,
   Area,
@@ -15,6 +16,9 @@ interface UsageChartProps {
 }
 
 export function UsageChart({ data, color = "#ffd60a" }: UsageChartProps) {
+  const uid = useId();
+  const gradInput = `${uid}-input`;
+  const gradOutput = `${uid}-output`;
   return (
     <div className="flex flex-col gap-1 h-full">
       {/* Custom legend outside Recharts so it doesn't escape the container */}
@@ -35,11 +39,11 @@ export function UsageChart({ data, color = "#ffd60a" }: UsageChartProps) {
             margin={{ top: 4, right: 10, left: -20, bottom: 0 }}
           >
             <defs>
-              <linearGradient id="colorInput" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={gradInput} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#4a7fa5" stopOpacity={0.5} />
                 <stop offset="95%" stopColor="#4a7fa5" stopOpacity={0} />
               </linearGradient>
-              <linearGradient id="colorOutput" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={gradOutput} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={color} stopOpacity={0.7} />
                 <stop offset="95%" stopColor={color} stopOpacity={0} />
               </linearGradient>
@@ -81,7 +85,7 @@ export function UsageChart({ data, color = "#ffd60a" }: UsageChartProps) {
               stroke="#4a7fa5"
               strokeWidth={1.5}
               fillOpacity={1}
-              fill="url(#colorInput)"
+              fill={`url(#${gradInput})`}
             />
             <Area
               type="monotone"
@@ -90,7 +94,7 @@ export function UsageChart({ data, color = "#ffd60a" }: UsageChartProps) {
               stroke={color}
               strokeWidth={2}
               fillOpacity={1}
-              fill="url(#colorOutput)"
+              fill={`url(#${gradOutput})`}
             />
           </AreaChart>
         </ResponsiveContainer>

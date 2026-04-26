@@ -111,27 +111,33 @@ struct SessionUsage {
 ///
 /// Files are pre-filtered by `mtime` so only recent session files are opened.
 fn aggregate_claude_sessions(days: u32) -> HashMap<String, (u64, u64, u64)> {
-    let mut daily: HashMap<String, (u64, u64, u64)> = HashMap::new();
-
-    let projects_root = match claude_projects_path() {
+    let root = match claude_projects_path() {
         Some(p) => p,
-        None => return daily,
+        None => return HashMap::new(),
     };
+    aggregate_claude_sessions_at(&root, days)
+}
+
+fn aggregate_claude_sessions_at(projects_root: &std::path::Path, days: u32) -> HashMap<String, (u64, u64, u64)> {
+    let days = days.min(365);
+    let mut daily: HashMap<String, (u64, u64, u64)> = HashMap::new();
 
     let cutoff = std::time::SystemTime::now()
         .checked_sub(Duration::from_secs(u64::from(days) * 86_400))
         .unwrap_or(std::time::UNIX_EPOCH);
 
-    let project_dirs = match std::fs::read_dir(&projects_root) {
+    let project_dirs = match std::fs::read_dir(projects_root) {
         Ok(d) => d,
         Err(_) => return daily,
     };
 
     for proj_entry in project_dirs.flatten() {
-        let proj_path = proj_entry.path();
-        if !proj_path.is_dir() {
+        // Use file_type() — unlike is_dir(), it does NOT follow symlinks.
+        let ft = match proj_entry.file_type() { Ok(t) => t, Err(_) => continue };
+        if !ft.is_dir() {
             continue;
         }
+        let proj_path = proj_entry.path();
 
         let session_files = match std::fs::read_dir(&proj_path) {
             Ok(d) => d,
@@ -285,10 +291,12 @@ fn aggregate_claude_projects(days: u32) -> Vec<ProjectStat> {
     let mut stats: Vec<ProjectStat> = project_dirs
         .flatten()
         .filter_map(|proj_entry| {
-            let proj_path = proj_entry.path();
-            if !proj_path.is_dir() {
+            // Use file_type() — unlike is_dir(), it does NOT follow symlinks.
+            let ft = proj_entry.file_type().ok()?;
+            if !ft.is_dir() {
                 return None;
             }
+            let proj_path = proj_entry.path();
             let dir_name = proj_path.file_name()?.to_str()?.to_string();
             // Skip worktree / temp project dirs (not rooted in $HOME).
             if !dir_name.starts_with(&home_encoded) {
@@ -432,16 +440,31 @@ pub struct ClaudeStats {
 
 // ── Model pricing ─────────────────────────────────────────────────────────────
 
+const OPUS_INPUT:   f64 = 15.0;
+const OPUS_OUTPUT:  f64 = 75.0;
+const OPUS_CR:      f64 = 1.50;
+const OPUS_CW:      f64 = 18.75;
+
+const SONNET_INPUT: f64 = 3.0;
+const SONNET_OUTPUT:f64 = 15.0;
+const SONNET_CR:    f64 = 0.30;
+const SONNET_CW:    f64 = 3.75;
+
+const HAIKU_INPUT:  f64 = 0.80;
+const HAIKU_OUTPUT: f64 = 4.0;
+const HAIKU_CR:     f64 = 0.08;
+const HAIKU_CW:     f64 = 1.00;
+
 /// USD per million tokens: (input, output, cache_read, cache_write).
 /// Matched by substring so new model versions are covered automatically.
 fn model_pricing_per_mtok(name: &str) -> (f64, f64, f64, f64) {
     let n = name.to_lowercase();
     if n.contains("opus") {
-        (15.0, 75.0, 1.50, 18.75)
+        (OPUS_INPUT, OPUS_OUTPUT, OPUS_CR, OPUS_CW)
     } else if n.contains("haiku") {
-        (0.80, 4.0, 0.08, 1.00)
+        (HAIKU_INPUT, HAIKU_OUTPUT, HAIKU_CR, HAIKU_CW)
     } else {
-        (3.0, 15.0, 0.30, 3.75) // sonnet / default
+        (SONNET_INPUT, SONNET_OUTPUT, SONNET_CR, SONNET_CW)
     }
 }
 
@@ -571,11 +594,15 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         .sum();
 
     // Project monthly cost: cost-per-token rate × last 30 days of JSONL tokens.
+    // Reuse session_data when the caller requested ≥ 30 days (avoids a second walk).
     let projected_monthly_cost_usd: Option<f64> = if lifetime_tokens > 0 && total_cost_usd > 0.0 {
         #[allow(clippy::cast_precision_loss)]
         let cost_per_token = total_cost_usd / lifetime_tokens as f64;
-        let sessions_30d = aggregate_claude_sessions(30);
-        let tokens_30d: u64 = sessions_30d.values().map(|(i, o, c)| i + o + c).sum();
+        let tokens_30d: u64 = if days.unwrap_or(30) >= 30 {
+            session_data.values().map(|(i, o, c)| i + o + c).sum()
+        } else {
+            aggregate_claude_sessions(30).values().map(|(i, o, c)| i + o + c).sum()
+        };
         #[allow(clippy::cast_precision_loss)]
         if tokens_30d > 0 { Some(tokens_30d as f64 * cost_per_token) } else { None }
     } else {
@@ -1345,9 +1372,11 @@ mod tests {
 
     #[test]
     fn aggregate_claude_sessions_returns_empty_for_missing_dir() {
-        // aggregate_claude_sessions should return an empty map for a nonexistent HOME, not panic.
-        unsafe { std::env::set_var("HOME", "/tmp/nonexistent-ai-pulse-test-home-xyz"); }
-        let result = aggregate_claude_sessions(7);
+        // Call the inner function directly with a nonexistent path — no env mutation needed.
+        let result = aggregate_claude_sessions_at(
+            std::path::Path::new("/tmp/nonexistent-ai-pulse-test-home-xyz/.claude/projects"),
+            7,
+        );
         assert!(result.is_empty());
     }
 }
