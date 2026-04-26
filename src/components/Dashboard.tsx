@@ -269,7 +269,7 @@ export function Dashboard() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -20, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className="relative w-full max-h-screen flex flex-col bg-[#000814]/60 border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
+      className="relative w-full max-h-screen flex flex-col bg-[#000814]/95 border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
       style={{ '--theme-color': providerData.themeColor } as React.CSSProperties}
     >
       {/* Header */}
@@ -447,7 +447,7 @@ export function Dashboard() {
             <h3 className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
               <TrendingUp className="w-3 h-3" /> {isRealDataProvider ? `${timeframe} Token Trend` : "Token Trend"}
             </h3>
-            <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[160px] sm:h-[200px]">
+            <div key={`chart-wrapper-${provider}`} className="bg-[#001d3d]/30 rounded-xl p-2 border border-[#003566]/30 h-[180px] sm:h-[220px]">
               <UsageChart data={usageData} color={providerData.themeColor} />
             </div>
           </div>

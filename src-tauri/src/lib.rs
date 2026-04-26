@@ -73,11 +73,23 @@ fn codex_sessions_path() -> Option<std::path::PathBuf> {
 
 /// One line from a Claude session `.jsonl` file. Only fields needed for
 /// token aggregation are deserialized; everything else is ignored.
+///
+/// Two formats exist in the wild:
+/// - Older: `usage` at the top level alongside `type` and `timestamp`
+/// - Newer: `usage` nested under a `message` object
 #[derive(serde::Deserialize)]
 struct SessionLine {
     #[serde(rename = "type")]
     kind: String,
     timestamp: Option<String>,
+    /// Older format — usage at the top level.
+    usage: Option<SessionUsage>,
+    /// Newer format — usage nested under `message`.
+    message: Option<SessionMessage>,
+}
+
+#[derive(serde::Deserialize)]
+struct SessionMessage {
     usage: Option<SessionUsage>,
 }
 
@@ -161,7 +173,8 @@ fn aggregate_claude_sessions(days: u32) -> HashMap<String, (u64, u64, u64)> {
                 if msg.kind != "assistant" {
                     continue;
                 }
-                let usage = match msg.usage {
+                // Resolve usage from top-level (older format) or message.usage (newer format).
+                let usage = match msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) {
                     Some(u) => u,
                     None => continue,
                 };
