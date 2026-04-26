@@ -484,7 +484,7 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-[#001d3d]/20 rounded-xl p-2 sm:p-3 border border-[#003566]/30 h-[200px] overflow-y-auto">
+            <div className="bg-[#001d3d]/20 rounded-xl p-2 sm:p-3 border border-[#003566]/30 h-[200px] overflow-y-auto custom-scrollbar">
               <AnimatePresence mode="wait">
                 {viewMode === "projects" ? (
                   <motion.div
