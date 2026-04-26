@@ -1,6 +1,6 @@
 import { useState, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Key, DollarSign, Palette, Trash2 } from "lucide-react";
+import { ArrowLeft, Key, DollarSign, Palette, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SettingsTab = "api-keys" | "budget" | "appearance" | "storage";
@@ -40,36 +40,38 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="absolute inset-0 z-50 bg-[#000814]/95 backdrop-blur-sm rounded-2xl flex flex-col"
+          key="settings-panel"
+          initial={{ x: "100%" }}
+          animate={{ x: 0 }}
+          exit={{ x: "100%" }}
+          transition={{ type: "spring", stiffness: 380, damping: 36 }}
+          className="absolute inset-0 z-50 bg-[#000814] rounded-2xl flex flex-col overflow-hidden"
         >
           {/* Header */}
-          <div className="shrink-0 flex items-center justify-between p-4 border-b border-[#003566]">
+          <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-[#003566]/60">
+            <button
+              onClick={handleClose}
+              className="text-gray-400 hover:text-white transition-colors p-1 -ml-1 rounded-lg hover:bg-white/5"
+              aria-label="Back to dashboard"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
             <h2 className="text-sm font-semibold tracking-wide" style={{ color: themeColor }}>
               Settings
             </h2>
-            <button
-              onClick={handleClose}
-              className="text-gray-400 hover:text-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
 
           {/* Tab nav */}
-          <div className="shrink-0 flex gap-1 px-4 pt-3">
+          <div className="shrink-0 flex gap-1 px-4 pt-3 pb-1">
             {SETTINGS_TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
                 className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase font-bold rounded-lg transition-all",
+                  "flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] uppercase font-bold rounded-lg transition-all",
                   activeTab === id
                     ? "bg-[#003566]"
-                    : "text-gray-500 hover:text-gray-300"
+                    : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
                 )}
                 style={activeTab === id ? { color: themeColor } : {}}
               >
@@ -80,23 +82,23 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 custom-scrollbar">
             {activeTab === "api-keys" && (
-              <div className="space-y-3">
-                <p className="text-[10px] text-gray-400">
-                  Claude Code reads data locally — no API key needed. Keys are required for Codex and Gemini (coming soon).
+              <div className="space-y-4">
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Claude Code reads session data locally — no API key needed. Keys will be required for Codex and Gemini providers (coming soon).
                 </p>
                 {COMING_SOON_PROVIDERS.map((p) => (
-                  <div key={p.label}>
-                    <label className="text-[10px] uppercase text-gray-400 tracking-wider block mb-1">
-                      {p.label} API Key
+                  <div key={p.label} className="space-y-1">
+                    <label className="text-[10px] uppercase text-gray-500 tracking-wider block">
+                      {p.label}
                     </label>
                     <input
                       type="password"
                       placeholder={p.placeholder}
                       readOnly
                       aria-disabled="true"
-                      className="w-full bg-[#001d3d]/40 border border-[#003566]/50 rounded-lg px-3 py-2 text-xs text-gray-500 font-mono cursor-not-allowed"
+                      className="w-full bg-[#001d3d]/40 border border-[#003566]/40 rounded-lg px-3 py-2 text-xs text-gray-600 font-mono cursor-not-allowed"
                     />
                   </div>
                 ))}
@@ -104,42 +106,55 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
             )}
 
             {activeTab === "budget" && (
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] uppercase text-gray-400 tracking-wider block mb-1">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase text-gray-500 tracking-wider block">
                     Monthly Budget (USD)
                   </label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 50"
-                    min="0"
-                    step="0.01"
-                    value={budgetLimitUsd !== null ? String(budgetLimitUsd) : ""}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === "") {
-                        onSetBudgetLimit(null);
-                        return;
-                      }
-                      const parsed = parseFloat(raw);
-                      onSetBudgetLimit(isFinite(parsed) && parsed >= 0 ? parsed : null);
-                    }}
-                    className="w-full bg-[#001d3d]/40 border border-[#003566]/50 rounded-lg px-3 py-2 text-xs text-gray-300 font-mono focus:outline-none focus:border-[#003566]"
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">$</span>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      value={budgetLimitUsd !== null ? String(budgetLimitUsd) : ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") { onSetBudgetLimit(null); return; }
+                        const parsed = parseFloat(raw);
+                        onSetBudgetLimit(isFinite(parsed) && parsed >= 0 ? parsed : null);
+                      }}
+                      className="w-full bg-[#001d3d]/40 border border-[#003566]/50 rounded-lg pl-7 pr-3 py-2 text-xs text-gray-200 font-mono focus:outline-none focus:border-[#003566]"
+                    />
+                  </div>
                 </div>
-                <p className="text-[10px] text-gray-500">Set a limit to see a warning banner when exceeded.</p>
+                <p className="text-[10px] text-gray-500">
+                  A warning banner appears on the dashboard when your lifetime spend exceeds this limit.
+                  {budgetLimitUsd !== null && (
+                    <button
+                      onClick={() => onSetBudgetLimit(null)}
+                      className="ml-2 text-red-400 hover:text-red-300 underline transition-colors"
+                    >
+                      Clear limit
+                    </button>
+                  )}
+                </p>
               </div>
             )}
 
             {activeTab === "appearance" && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">Launch at login</span>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <p className="text-sm text-gray-200">Launch at login</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Start AI Pulse automatically on login</p>
+                  </div>
                   <button
                     onClick={() => onToggleAutoLaunch(!autoLaunchEnabled)}
                     className={cn(
-                      "w-10 h-5 rounded-full transition-colors relative",
-                      autoLaunchEnabled ? "bg-[color:var(--theme-color,#ffd60a)]" : "bg-gray-600"
+                      "w-10 h-5 rounded-full transition-colors relative shrink-0",
+                      autoLaunchEnabled ? "bg-[color:var(--theme-color,#ffd60a)]" : "bg-gray-700"
                     )}
                     aria-pressed={autoLaunchEnabled}
                     aria-label="Toggle launch at login"
@@ -152,20 +167,22 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
                     />
                   </button>
                 </div>
-                <p className="text-[10px] text-gray-400">Theme customization coming in a future release.</p>
+                <div className="border-t border-[#003566]/40 pt-3">
+                  <p className="text-[10px] text-gray-500">Theme customization coming in a future release.</p>
+                </div>
               </div>
             )}
 
             {activeTab === "storage" && (
-              <div className="space-y-3">
-                <p className="text-[10px] text-gray-400 leading-relaxed">
-                  AI Pulse reads data directly from local AI assistant files — it stores no data of its own except your settings preferences.
+              <div className="space-y-4">
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  AI Pulse reads data directly from local AI assistant session files. The only data it stores are your settings preferences (budget limit, provider selection, timeframe).
                 </p>
                 <button
-                  onClick={onResetPreferences}
-                  className="w-full px-3 py-2 text-xs font-medium bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-lg transition-colors border border-red-900/50"
+                  onClick={() => { onResetPreferences(); handleClose(); }}
+                  className="w-full px-3 py-2.5 text-xs font-medium bg-red-900/20 hover:bg-red-900/40 text-red-400 hover:text-red-300 rounded-lg transition-colors border border-red-900/40"
                 >
-                  Clear Saved Preferences
+                  Reset All Preferences
                 </button>
               </div>
             )}
