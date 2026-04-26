@@ -184,6 +184,14 @@ No fees, royalties, or prior approval needed. See [LICENSE](LICENSE) for the ful
 
 ---
 
+## Contributing
+
+AI Pulse welcomes contributions. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, code standards, and the areas most in need of help (Gemini data pipeline, Windows/Linux support, test coverage).
+
+Open an issue before starting any non-trivial work so we can align on approach.
+
+---
+
 ## Support the project
 
 If AI Pulse saves you time or gives you useful insight into your AI usage, a GitHub star goes a long way — it helps others find the project.
