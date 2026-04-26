@@ -12,7 +12,7 @@ import type { ClaudeUsageResult } from "@/lib/claudeUsage";
 import type { CodexUsageResult } from "@/lib/codexUsage";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
-import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles, Settings } from "lucide-react";
+import { Box, Layers, Zap, TrendingUp, DollarSign, RefreshCw, Code2, Sparkles, Settings, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsModal } from "./SettingsModal";
 
@@ -269,70 +269,91 @@ export function Dashboard() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -20, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className="relative w-[360px] sm:w-[400px] max-h-[calc(100vh-50px)] flex flex-col bg-[#000814]/60 border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
+      className="relative w-full max-h-screen flex flex-col bg-[#000814]/60 border border-[#003566] rounded-2xl shadow-2xl overflow-hidden text-white font-sans"
       style={{ '--theme-color': providerData.themeColor } as React.CSSProperties}
     >
       {/* Header */}
         <div className="shrink-0 bg-[#001d3d]/50 border-b border-[#003566] flex flex-col">
-          <div className="p-3 sm:p-4 pb-2 flex justify-between items-center">
+          {/* Row 1: Brand + provider selector + actions */}
+          <div className="px-3 sm:px-4 pt-3 pb-2 flex justify-between items-center">
             <div className="flex items-center gap-2">
+              {/* Brand */}
               <ProviderIcon className="w-4 h-4" style={{ color: providerData.themeColor }} />
-              <select
-                value={provider}
-                onChange={(e) => setProvider(e.target.value as Provider)}
-                className="bg-transparent text-xs sm:text-sm font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none"
+              <span
+                className="text-xs font-extrabold tracking-widest uppercase"
                 style={{ color: providerData.themeColor }}
               >
-                <option value="claude">AI Pulse</option>
-                <option value="codex">OpenAI Codex</option>
-                <option value="gemini">Google Gemini</option>
-              </select>
+                AI Pulse
+              </span>
+              {/* Divider */}
+              <div className="w-px h-3.5 bg-[#003566] mx-1" />
+              {/* Inline provider selector */}
+              <div className="relative flex items-center gap-1">
+                <div
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ backgroundColor: providerData.themeColor }}
+                />
+                <select
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as Provider)}
+                  className="bg-transparent text-[10px] font-semibold tracking-wide uppercase outline-none cursor-pointer appearance-none pr-4 text-gray-400 hover:text-white transition-colors"
+                >
+                  <option value="claude">Claude</option>
+                  <option value="codex">Codex</option>
+                  <option value="gemini">Gemini</option>
+                </select>
+                <ChevronDown className="w-2.5 h-2.5 text-gray-500 absolute right-0 pointer-events-none" />
+              </div>
             </div>
             <div className="flex items-center gap-3">
-                <AnimatePresence mode="wait">
-                  {error ? (
-                    <motion.span
-                      key="error"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="text-[10px] sm:text-xs text-red-400 font-mono"
-                    >
-                      {error}
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      key="cost"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="text-[10px] sm:text-xs text-gray-400 font-mono"
-                    >
-                      {getCostLabel()}
-                    </motion.span>
+              <AnimatePresence mode="wait">
+                {error ? (
+                  <motion.span
+                    key="error"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="text-[10px] sm:text-xs text-red-400 font-mono"
+                  >
+                    {error}
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="cost"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="text-[10px] sm:text-xs text-gray-400 font-mono"
+                  >
+                    {getCostLabel()}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+              <div className="flex items-center gap-2 text-gray-400">
+                <button
+                  onClick={openSettings}
+                  aria-label="Open settings"
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <Settings className="w-3 h-3" />
+                </button>
+                <RefreshCw
+                  className={cn(
+                    "w-3 h-3 hover:text-white cursor-pointer transition-all",
+                    isRefreshing && "animate-spin text-[#ffd60a]"
                   )}
-                </AnimatePresence>
-                <div className="flex items-center gap-2 text-gray-400">
-                    {/* Issue 6: interactive element must be a <button> */}
-                    <button
-                      onClick={openSettings}
-                      aria-label="Open settings"
-                      className="text-gray-400 hover:text-white transition-colors"
-                    >
-                      <Settings className="w-3 h-3" />
-                    </button>
-                    <RefreshCw
-                      className={cn(
-                        "w-3 h-3 hover:text-white cursor-pointer transition-all",
-                        isRefreshing && "animate-spin text-[#ffd60a]"
-                      )}
-                      onClick={handleRefresh}
-                    />
-                </div>
+                  onClick={handleRefresh}
+                />
+              </div>
             </div>
           </div>
+          {/* Row 2: Timeframe range filter */}
           {isRealDataProvider && (
-            <div className="px-3 sm:px-4 pb-2 flex items-center gap-1">
+            <div className="px-3 sm:px-4 pb-2 flex items-center gap-2">
+              <span className="text-[8px] uppercase tracking-widest text-gray-500 font-semibold">
+                Range
+              </span>
+              <div className="flex-1" />
               {ALL_TIMEFRAMES.map((t) => (
                 <button
                   key={t}
