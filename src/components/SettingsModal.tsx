@@ -1,4 +1,4 @@
-import { useState, useEffect, type ElementType } from "react";
+import { useState, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Key, DollarSign, Palette, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,9 +31,10 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences, budgetLimitUsd, onSetBudgetLimit, autoLaunchEnabled, onToggleAutoLaunch }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api-keys");
 
-  useEffect(() => {
-    if (isOpen) setActiveTab("api-keys");
-  }, [isOpen]);
+  const handleClose = () => {
+    setActiveTab("api-keys");
+    onClose();
+  };
 
   return (
     <AnimatePresence>
@@ -51,7 +52,7 @@ export function SettingsModal({ isOpen, onClose, themeColor, onResetPreferences,
               Settings
             </h2>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="text-gray-400 hover:text-white transition-colors"
             >
               <X className="w-4 h-4" />

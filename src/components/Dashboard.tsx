@@ -6,7 +6,6 @@ import { PROVIDERS, Provider } from "@/lib/data";
 import { fetchClaudeStats, onClaudeStatsUpdated } from "@/lib/claudeUsage";
 import { fetchCodexStats, onCodexStatsUpdated } from "@/lib/codexUsage";
 import { useAppStore, ALL_TIMEFRAMES } from "@/lib/store";
-import type { Timeframe } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
 import type { ClaudeUsageResult, ProjectStat } from "@/lib/claudeUsage";
 import type { CodexUsageResult } from "@/lib/codexUsage";
