@@ -1114,7 +1114,7 @@ pub fn run() {
             let pending_show_tray = pending_show.clone();
             let tray = TrayIconBuilder::new()
                 .icon(tray_icon)
-                .icon_as_template(true)
+                .icon_as_template(false)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {
