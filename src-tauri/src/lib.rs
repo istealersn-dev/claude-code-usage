@@ -246,50 +246,54 @@ pub struct ProjectStat {
 }
 
 /// Returns the context window size (`input` + `cache_read` + `cache_write`) of the most
-/// recent assistant message across all session JSONL files in `~/.claude/projects/`.
-/// Finds the file with the newest mtime, scans it, and returns the last usage entry.
+/// recent assistant message across ALL session JSONL files in `~/.claude/projects/`.
+/// Compares by ISO timestamp so the result is not tied to any single project.
 fn current_context_tokens() -> u64 {
     let Some(root) = claude_projects_path() else { return 0 };
     let Ok(project_dirs) = std::fs::read_dir(&root) else { return 0 };
 
-    // Find the JSONL file with the most recent modification time.
-    let mut newest_mtime = std::time::UNIX_EPOCH;
-    let mut newest_path: Option<std::path::PathBuf> = None;
+    // Only scan files modified within the last 24 hours to bound the walk.
+    let cutoff = std::time::SystemTime::now()
+        .checked_sub(Duration::from_secs(86_400))
+        .unwrap_or(std::time::UNIX_EPOCH);
+
+    let mut latest_ts = String::new();
+    let mut latest_ctx: u64 = 0;
 
     for proj_entry in project_dirs.flatten() {
         let Ok(ft) = proj_entry.file_type() else { continue };
         if !ft.is_dir() { continue; }
         let Ok(files) = std::fs::read_dir(proj_entry.path()) else { continue };
+
         for file_entry in files.flatten() {
             let path = file_entry.path();
             let fname = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
             if !std::path::Path::new(fname).extension().is_some_and(|e| e.eq_ignore_ascii_case("jsonl")) {
                 continue;
             }
-            let Ok(meta) = path.metadata() else { continue };
-            let Ok(mtime) = meta.modified() else { continue };
-            if mtime > newest_mtime {
-                newest_mtime = mtime;
-                newest_path = Some(path);
+            // Pre-filter by mtime before reading the full file.
+            if path.metadata().ok().and_then(|m| m.modified().ok()).is_none_or(|mt| mt < cutoff) {
+                continue;
+            }
+            let Ok(content) = std::fs::read_to_string(&path) else { continue };
+
+            for line in content.lines() {
+                if line.is_empty() { continue; }
+                let Ok(msg) = serde_json::from_str::<SessionLine>(line) else { continue };
+                if msg.kind != "assistant" { continue; }
+                let Some(ts) = msg.timestamp.as_deref() else { continue };
+                // ISO timestamps sort lexicographically — no parsing needed.
+                if ts <= latest_ts.as_str() { continue; }
+                let Some(usage) = msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) else { continue };
+                latest_ts = ts.to_string();
+                latest_ctx = usage.input_tokens
+                    + usage.cache_read_input_tokens
+                    + usage.cache_creation_input_tokens;
             }
         }
     }
 
-    let Some(path) = newest_path else { return 0 };
-    let Ok(content) = std::fs::read_to_string(&path) else { return 0 };
-
-    // Walk the file and keep the last usage we encounter.
-    let mut last_ctx: u64 = 0;
-    for line in content.lines() {
-        if line.is_empty() { continue; }
-        let Ok(msg) = serde_json::from_str::<SessionLine>(line) else { continue };
-        if msg.kind != "assistant" { continue; }
-        let Some(usage) = msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) else { continue };
-        last_ctx = usage.input_tokens
-            + usage.cache_read_input_tokens
-            + usage.cache_creation_input_tokens;
-    }
-    last_ctx
+    latest_ctx
 }
 
 /// Scans `~/.claude/projects/` and aggregates per-project input+output token totals
