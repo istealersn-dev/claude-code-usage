@@ -430,6 +430,36 @@ pub struct ClaudeStats {
     project_stats: Vec<ProjectStat>,
 }
 
+// ── Model pricing ─────────────────────────────────────────────────────────────
+
+/// USD per million tokens: (input, output, cache_read, cache_write).
+/// Matched by substring so new model versions are covered automatically.
+fn model_pricing_per_mtok(name: &str) -> (f64, f64, f64, f64) {
+    let n = name.to_lowercase();
+    if n.contains("opus") {
+        (15.0, 75.0, 1.50, 18.75)
+    } else if n.contains("haiku") {
+        (0.80, 4.0, 0.08, 1.00)
+    } else {
+        (3.0, 15.0, 0.30, 3.75) // sonnet / default
+    }
+}
+
+fn compute_model_cost(name: &str, m: &ModelUsageEntry) -> f64 {
+    if m.cost_usd > 0.0 {
+        return m.cost_usd;
+    }
+    let (inp, out, cr, cw) = model_pricing_per_mtok(name);
+    let mtok = 1_000_000.0_f64;
+    #[allow(clippy::cast_precision_loss)]
+    {
+        (m.input_tokens as f64 / mtok) * inp
+            + (m.output_tokens as f64 / mtok) * out
+            + (m.cache_read_tokens as f64 / mtok) * cr
+            + (m.cache_creation_tokens as f64 / mtok) * cw
+    }
+}
+
 // ── IPC command ───────────────────────────────────────────────────────────────
 
 /// Reads ~/.claude/stats-cache.json and returns structured usage data.
@@ -531,14 +561,16 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         entries = entries.split_off(entries.len() - limit);
     }
 
-    // Total cost: sum costUSD across all model entries.
-    let total_cost_usd: f64 = cache.model_usage.values().map(|m| m.cost_usd).sum();
+    // Total cost: use cached costUSD when available, otherwise compute from
+    // token counts using the pricing table (stats-cache.json often stores 0).
+    let total_cost_usd: f64 = cache.model_usage.iter()
+        .map(|(name, m)| compute_model_cost(name, m))
+        .sum();
     let lifetime_tokens: u64 = cache.model_usage.values()
         .map(|m| m.input_tokens + m.output_tokens + m.cache_read_tokens + m.cache_creation_tokens)
         .sum();
 
-    // Derive cost-per-token from lifetime model data, apply to last 30 days
-    // of actual JSONL token usage to estimate this month's spend.
+    // Project monthly cost: cost-per-token rate × last 30 days of JSONL tokens.
     let projected_monthly_cost_usd: Option<f64> = if lifetime_tokens > 0 && total_cost_usd > 0.0 {
         #[allow(clippy::cast_precision_loss)]
         let cost_per_token = total_cost_usd / lifetime_tokens as f64;
@@ -555,11 +587,11 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         .model_usage
         .into_iter()
         .map(|(name, m)| ModelStat {
+            cost_usd: compute_model_cost(&name, &m),
             name,
             input_tokens: m.input_tokens,
             output_tokens: m.output_tokens,
             cache_tokens: m.cache_read_tokens + m.cache_creation_tokens,
-            cost_usd: m.cost_usd,
         })
         .collect();
 
