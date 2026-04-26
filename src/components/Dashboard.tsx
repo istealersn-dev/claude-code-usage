@@ -157,7 +157,15 @@ export function Dashboard() {
     return providerData.modelUsage;
   })();
 
-  const contextPercentage = (contextUsage / providerData.contextLimit) * 100;
+  const contextPercentage = (() => {
+    if (isRealDataProvider) {
+      // For real providers, show today relative to the peak day in the current
+      // period — 100% = your busiest day, keeps the gauge meaningful and bounded.
+      const peakDay = Math.max(...usageData.map(d => d.inputTokens + d.outputTokens + d.cacheTokens), 1);
+      return Math.min((contextUsage / peakDay) * 100, 100);
+    }
+    return Math.min((contextUsage / providerData.contextLimit) * 100, 100);
+  })();
 
   const ProviderIcon = PROVIDER_ICONS[provider];
 
@@ -433,10 +441,12 @@ export function Dashboard() {
                </div>
                <div className="mt-2 text-center">
                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">
-                   {isRealDataProvider ? "Today's Usage" : "Context Limit"}
+                   {isRealDataProvider ? "Today's Tokens" : "Context Limit"}
                  </p>
                  <p className="text-xs font-mono text-white">
-                   {(contextUsage / 1000).toFixed(0)}k / {(providerData.contextLimit / 1000).toFixed(0)}k
+                   {isRealDataProvider
+                     ? formatTokenCount(contextUsage)
+                     : `${(contextUsage / 1000).toFixed(0)}k / ${(providerData.contextLimit / 1000).toFixed(0)}k`}
                  </p>
                </div>
             </div>

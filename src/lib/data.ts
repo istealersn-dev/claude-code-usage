@@ -35,7 +35,7 @@ export interface ProviderData {
 }
 
 const claudeData: ProviderData = {
-  name: "AI Pulse",
+  name: "Claude Code",
   themeColor: "#ffd60a",
   themeDark: "#ffc300",
   contextLimit: 200000,
