@@ -56,8 +56,6 @@ const PROVIDER_ICONS: Record<Provider, React.ElementType> = {
   gemini: Sparkles,
 };
 
-const mockRefresh = (): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, 1500));
 
 export function Dashboard() {
   const { provider, setProvider, timeframe, setTimeframe, isSettingsOpen, openSettings, closeSettings, resetPreferences, budgetLimitUsd, setBudgetLimit, autoLaunchEnabled, setAutoLaunchEnabled } = useAppStore(
@@ -94,12 +92,7 @@ export function Dashboard() {
   const [codexUsageData, setCodexUsageData] = useState<typeof providerData.usageData | null>(null);
   const [realCodexModelUsage, setRealCodexModelUsage] = useState<typeof providerData.modelUsage | null>(null);
   const [codexTrendPct, setCodexTrendPct] = useState<number | null>(null);
-  // Non-Claude mock-refresh override, keyed by provider to avoid stale data across provider switches
-  const [mockRefreshData, setMockRefreshData] = useState<{
-    provider: Provider;
-    usageData: typeof providerData.usageData;
-    contextUsage: number;
-  } | null>(null);
+
 
   const applyClaudeResult = useCallback((result: ClaudeUsageResult) => {
     if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
@@ -131,28 +124,20 @@ export function Dashboard() {
 
   // Derived display values — no synchronous setState in effects needed.
   // Order of preference per provider:
-  //   claude → real fetched data, else mock
-  //   codex  → real fetched data, else mock
-  //   other  → mock-refresh data (keyed by provider), else mock
+  // Real data only — no mock fallback. Providers with no local sessions show empty state.
   const usageData = (() => {
-    if (provider === "claude") return claudeUsageData ?? providerData.usageData;
-    if (provider === "codex") return codexUsageData ?? providerData.usageData;
-    return mockRefreshData?.provider === provider ? mockRefreshData.usageData : providerData.usageData;
-  })();
-  // Context window usage: tokens currently in the active context / provider limit.
-  // For Claude: sourced from the most recent assistant message in the active session.
-  // For others: falls back to mock currentUsage / contextLimit.
-  const contextUsage = (() => {
-    if (provider === "claude") return claudeContextTokens ?? 0;
-    return mockRefreshData?.provider === provider
-      ? mockRefreshData.contextUsage
-      : providerData.currentUsage;
+    if (provider === "claude") return claudeUsageData ?? [];
+    if (provider === "codex") return codexUsageData ?? [];
+    return [];
   })();
 
+  // Context window usage from the most recent assistant message; 0 when unavailable.
+  const contextUsage = provider === "claude" ? (claudeContextTokens ?? 0) : 0;
+
   const displayModelUsage = (() => {
-    if (provider === "claude") return realModelUsage ?? providerData.modelUsage;
-    if (provider === "codex") return realCodexModelUsage ?? providerData.modelUsage;
-    return providerData.modelUsage;
+    if (provider === "claude") return realModelUsage ?? [];
+    if (provider === "codex") return realCodexModelUsage ?? [];
+    return [];
   })();
 
   const contextPercentage = Math.min((contextUsage / providerData.contextLimit) * 100, 100);
@@ -277,26 +262,7 @@ export function Dashboard() {
           setIsRefreshing(false);
         });
     } else {
-      // Mock refresh for non-Claude providers
-      mockRefresh()
-        .then(() => {
-          const randomFactor = 0.95 + Math.random() * 0.1;
-          const newContextUsage = Math.min(
-            providerData.contextLimit,
-            Math.max(0, providerData.currentUsage * randomFactor)
-          );
-          const newData = [...providerData.usageData];
-          const lastDay = { ...newData[newData.length - 1] };
-          lastDay.inputTokens = Math.floor(lastDay.inputTokens * (0.9 + Math.random() * 0.2));
-          lastDay.outputTokens = Math.floor(lastDay.outputTokens * (0.9 + Math.random() * 0.2));
-          newData[newData.length - 1] = lastDay;
-          setMockRefreshData({ provider, usageData: newData, contextUsage: newContextUsage });
-          setIsRefreshing(false);
-        })
-        .catch(() => {
-          setError("Update failed");
-          setIsRefreshing(false);
-        });
+      setIsRefreshing(false);
     }
   };
 
@@ -547,17 +513,7 @@ export function Dashboard() {
                         Project breakdown is not available for Codex sessions
                       </p>
                     ) : (
-                      providerData.projectUsage.map((project) => (
-                        <div key={project.name} className="relative flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
-                          <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: providerData.themeColor }} />
-                            <span className="text-gray-300 group-hover:text-white transition-colors">{project.name}</span>
-                          </div>
-                          <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
-                            ${project.cost.toFixed(2)}
-                          </span>
-                        </div>
-                      ))
+                      <p className="text-[10px] text-gray-500 text-center py-6">No data available</p>
                     )}
                   </motion.div>
                 ) : (
