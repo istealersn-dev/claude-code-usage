@@ -8,7 +8,7 @@ import { fetchCodexStats, onCodexStatsUpdated } from "@/lib/codexUsage";
 import { useAppStore, ALL_TIMEFRAMES } from "@/lib/store";
 import type { Timeframe } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
-import type { ClaudeUsageResult } from "@/lib/claudeUsage";
+import type { ClaudeUsageResult, ProjectStat } from "@/lib/claudeUsage";
 import type { CodexUsageResult } from "@/lib/codexUsage";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
@@ -50,6 +50,7 @@ export function Dashboard() {
   // Async overrides — set only from fetch callbacks, never synchronously in effects
   const [claudeUsageData, setClaudeUsageData] = useState<typeof providerData.usageData | null>(null);
   const [realModelUsage, setRealModelUsage] = useState<typeof providerData.modelUsage | null>(null);
+  const [realProjectUsage, setRealProjectUsage] = useState<ProjectStat[] | null>(null);
   const [claudeTotalCost, setClaudeTotalCost] = useState<number | null>(null);
   const [claudeTrendPct, setClaudeTrendPct] = useState<number | null>(null);
   const [claudeProjectedCost, setClaudeProjectedCost] = useState<number | null>(null);
@@ -68,6 +69,7 @@ export function Dashboard() {
   const applyClaudeResult = useCallback((result: ClaudeUsageResult) => {
     if (result.usageData.length > 0) setClaudeUsageData(result.usageData);
     if (result.modelUsage.length > 0) setRealModelUsage(result.modelUsage);
+    if (result.projectStats.length > 0) setRealProjectUsage(result.projectStats);
     setClaudeTotalCost(result.totalCostUsd > 0 ? result.totalCostUsd : null);
     setClaudeTrendPct(result.trendPct);
     setClaudeProjectedCost(result.projectedMonthlyCostUsd ?? null);
@@ -483,7 +485,7 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-[#001d3d]/20 rounded-xl p-2 sm:p-3 border border-[#003566]/30 min-h-[120px]">
+            <div className="bg-[#001d3d]/20 rounded-xl p-2 sm:p-3 border border-[#003566]/30 h-[200px] overflow-y-auto">
               <AnimatePresence mode="wait">
                 {viewMode === "projects" ? (
                   <motion.div
@@ -492,31 +494,49 @@ export function Dashboard() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
                     transition={{ duration: 0.2 }}
-                    className="space-y-1 sm:space-y-2"
+                    className="space-y-1"
                   >
-                    {provider === "claude" ? (
-                      <p className="text-[10px] text-gray-500 text-center py-4 px-2 leading-relaxed">
-                        Project breakdown is not available — Claude Code does not expose per-project usage in stats-cache.json
-                      </p>
+                    {provider === "claude" && realProjectUsage !== null ? (
+                      (() => {
+                        const totalTokens = realProjectUsage.reduce((sum, p) => sum + p.tokens, 0);
+                        return realProjectUsage.map((project) => {
+                          const barPct = totalTokens > 0 ? (project.tokens / totalTokens) * 100 : 0;
+                          const tokenLabel = project.tokens >= 1_000_000
+                            ? `${(project.tokens / 1_000_000).toFixed(1)}M`
+                            : project.tokens >= 1_000
+                            ? `${Math.round(project.tokens / 1_000)}k`
+                            : String(project.tokens);
+                          return (
+                            <div key={project.name} className="flex flex-col gap-1 p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors cursor-pointer group">
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-2 text-[10px] sm:text-xs">
+                                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: providerData.themeColor }} />
+                                  <span className="text-gray-300 group-hover:text-white transition-colors truncate max-w-[180px]">{project.name}</span>
+                                </div>
+                                <span className="text-[9px] font-mono text-gray-500 group-hover:text-gray-300 transition-colors shrink-0">{tokenLabel}</span>
+                              </div>
+                              <div className="h-[3px] bg-[#001d3d] rounded-full overflow-hidden ml-3.5">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${barPct}%`, backgroundColor: providerData.themeColor, opacity: 0.65 }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()
+                    ) : provider === "claude" ? (
+                      <p className="text-[10px] text-gray-500 text-center py-6">Loading project data…</p>
                     ) : provider === "codex" ? (
-                      <p className="text-[10px] text-gray-500 text-center py-4 px-2 leading-relaxed">
-                        Project breakdown is not available — Codex session files do not record a project identifier
+                      <p className="text-[10px] text-gray-500 text-center py-6 px-2 leading-relaxed">
+                        Project breakdown is not available for Codex sessions
                       </p>
                     ) : (
                       providerData.projectUsage.map((project) => (
                         <div key={project.name} className="relative flex justify-between items-center text-[10px] sm:text-xs group cursor-pointer p-1.5 sm:p-2 hover:bg-[#001d3d]/50 rounded-lg transition-colors">
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-[#000814] border border-[#003566] text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl translate-y-2 group-hover:translate-y-0">
-                            <span className="font-mono" style={{ color: providerData.themeColor }}>{(project.tokens / 1000).toFixed(0)}k</span> tokens
-                            <span className="mx-1 text-gray-500">•</span>
-                            <span className="text-white font-mono">${project.cost.toFixed(2)}</span>
-                          </div>
-
                           <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#003566] transition-colors" style={{ backgroundColor: providerData.themeColor }} />
-                            <span className="text-gray-300 group-hover:text-white transition-colors">
-                              {project.name}
-                            </span>
+                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: providerData.themeColor }} />
+                            <span className="text-gray-300 group-hover:text-white transition-colors">{project.name}</span>
                           </div>
                           <span className="font-mono opacity-80 group-hover:opacity-100" style={{ color: providerData.themeColor }}>
                             ${project.cost.toFixed(2)}

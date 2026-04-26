@@ -22,9 +22,15 @@ const RawModelStatSchema = z.object({
   cost_usd: z.number(),
 });
 
+const RawProjectStatSchema = z.object({
+  name: z.string(),
+  tokens: z.number(),
+});
+
 const RawClaudeStatsSchema = z.object({
   daily_usage: z.array(RawDailyUsageSchema),
   model_stats: z.array(RawModelStatSchema),
+  project_stats: z.array(RawProjectStatSchema),
   total_sessions: z.number(),
   total_cost_usd: z.number(),
   trend_pct: z.number().nullable(),
@@ -42,10 +48,16 @@ export interface ModelDetail {
   costUsd: number;
 }
 
+export interface ProjectStat {
+  name: string;
+  tokens: number;
+}
+
 export interface ClaudeUsageResult {
   usageData: UsageData[];
   modelUsage: ModelUsage[];
   modelDetails: ModelDetail[];
+  projectStats: ProjectStat[];
   totalTokens: number;
   totalSessions: number;
   totalCostUsd: number;
@@ -91,6 +103,7 @@ export async function fetchClaudeStats(timeframe: Timeframe = DEFAULT_TIMEFRAME)
     usageData,
     modelUsage,
     modelDetails,
+    projectStats: raw.project_stats,
     totalTokens,
     totalSessions: raw.total_sessions,
     totalCostUsd: raw.total_cost_usd,

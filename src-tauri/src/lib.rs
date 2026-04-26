@@ -198,6 +198,153 @@ fn aggregate_claude_sessions(days: u32) -> HashMap<String, (u64, u64, u64)> {
     daily
 }
 
+// ── Per-project aggregation ───────────────────────────────────────────────────
+
+/// Decodes a Claude project directory name back to a human-readable project name.
+///
+/// Claude encodes the project's absolute path as the directory name by replacing
+/// each `/` with `-` (e.g. `-Users-alice-code-my-app` → `my-app`).
+/// We strip the HOME prefix then greedily walk the filesystem to find the real path,
+/// returning its last component. Falls back to the last dash-segment on failure.
+fn project_display_name(dir_name: &str) -> String {
+    fn last_dash_segment(s: &str) -> String {
+        s.trim_start_matches('-')
+            .split('-')
+            .filter(|p| !p.is_empty())
+            .last()
+            .unwrap_or(s)
+            .to_string()
+    }
+
+    fn greedy_last(base: &std::path::Path, rest: &str, depth: u8) -> Option<String> {
+        if depth > 10 {
+            return None;
+        }
+        if rest.is_empty() {
+            return base.file_name()?.to_str().map(String::from);
+        }
+        let mut children: Vec<String> = std::fs::read_dir(base)
+            .ok()?
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter(|name| rest.starts_with(name.as_str()))
+            .collect();
+        // Longest match first to avoid short-circuit on common prefixes.
+        children.sort_by_key(|s| std::cmp::Reverse(s.len()));
+        for child in &children {
+            let after = rest[child.len()..].trim_start_matches('-');
+            if let Some(result) = greedy_last(&base.join(child), after, depth + 1) {
+                return Some(result);
+            }
+        }
+        None
+    }
+
+    let Ok(home) = std::env::var("HOME") else {
+        return last_dash_segment(dir_name);
+    };
+    // Encode HOME the same way Claude does: strip leading '/' then replace '/' with '-'.
+    let home_encoded = format!("-{}", home.trim_start_matches('/').replace('/', "-"));
+    let rest = match dir_name.strip_prefix(&home_encoded) {
+        Some(r) => r.trim_start_matches('-'),
+        None => return last_dash_segment(dir_name),
+    };
+    let home_path = std::path::PathBuf::from(&home);
+    greedy_last(&home_path, rest, 0).unwrap_or_else(|| last_dash_segment(rest))
+}
+
+/// Per-project token totals for the requested window, returned as part of [`ClaudeStats`].
+#[derive(serde::Serialize)]
+pub struct ProjectStat {
+    /// Human-readable project name decoded from the session directory name.
+    name: String,
+    /// Total input + output tokens for this project in the window.
+    tokens: u64,
+}
+
+/// Scans `~/.claude/projects/` and aggregates per-project input+output token totals
+/// across all session JSONL files whose mtime falls within the last `days` days.
+/// Skips temp/worktree directories (those not rooted in `$HOME`).
+fn aggregate_claude_projects(days: u32) -> Vec<ProjectStat> {
+    let projects_root = match claude_projects_path() {
+        Some(p) => p,
+        None => return vec![],
+    };
+    let Ok(home) = std::env::var("HOME") else { return vec![]; };
+    let home_encoded = format!("-{}", home.trim_start_matches('/').replace('/', "-"));
+
+    let cutoff = std::time::SystemTime::now()
+        .checked_sub(Duration::from_secs(u64::from(days) * 86_400))
+        .unwrap_or(std::time::UNIX_EPOCH);
+
+    let project_dirs = match std::fs::read_dir(&projects_root) {
+        Ok(d) => d,
+        Err(_) => return vec![],
+    };
+
+    let mut stats: Vec<ProjectStat> = project_dirs
+        .flatten()
+        .filter_map(|proj_entry| {
+            let proj_path = proj_entry.path();
+            if !proj_path.is_dir() {
+                return None;
+            }
+            let dir_name = proj_path.file_name()?.to_str()?.to_string();
+            // Skip worktree / temp project dirs (not rooted in $HOME).
+            if !dir_name.starts_with(&home_encoded) {
+                return None;
+            }
+
+            let mut tokens: u64 = 0;
+
+            for file_entry in std::fs::read_dir(&proj_path).ok()?.flatten() {
+                let file_path = file_entry.path();
+                let fname = file_path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                if !fname.ends_with(".jsonl") {
+                    continue;
+                }
+                if let Ok(meta) = file_path.metadata() {
+                    if let Ok(mtime) = meta.modified() {
+                        if mtime < cutoff {
+                            continue;
+                        }
+                    }
+                }
+                let content = match std::fs::read_to_string(&file_path) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                for line in content.lines() {
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let msg: SessionLine = match serde_json::from_str(line) {
+                        Ok(m) => m,
+                        Err(_) => continue,
+                    };
+                    if msg.kind != "assistant" {
+                        continue;
+                    }
+                    let usage = match msg.usage.or_else(|| msg.message.and_then(|m| m.usage)) {
+                        Some(u) => u,
+                        None => continue,
+                    };
+                    tokens += usage.input_tokens + usage.output_tokens;
+                }
+            }
+
+            if tokens == 0 {
+                return None;
+            }
+            let name = project_display_name(&dir_name);
+            Some(ProjectStat { name, tokens })
+        })
+        .collect();
+
+    stats.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+    stats
+}
+
 // ── Stats-cache data types ────────────────────────────────────────────────────
 
 #[derive(serde::Deserialize)]
@@ -279,6 +426,8 @@ pub struct ClaudeStats {
     /// Projected month-end cost based on daily average of current month.
     /// None if no data exists.
     projected_monthly_cost_usd: Option<f64>,
+    /// Per-project token totals for the requested window, sorted by tokens descending.
+    project_stats: Vec<ProjectStat>,
 }
 
 // ── IPC command ───────────────────────────────────────────────────────────────
@@ -409,9 +558,12 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         tb.cmp(&ta)
     });
 
+    let project_stats = aggregate_claude_projects(days.unwrap_or(30));
+
     Ok(ClaudeStats {
         daily_usage: entries,
         model_stats,
+        project_stats,
         total_sessions: cache.total_sessions,
         total_cost_usd,
         trend_pct,
@@ -606,6 +758,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
         return Ok(ClaudeStats {
             daily_usage: Vec::new(),
             model_stats: Vec::new(),
+            project_stats: Vec::new(),
             total_sessions: 0,
             total_cost_usd: 0.0,
             trend_pct: None,
@@ -781,6 +934,7 @@ fn get_codex_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
     Ok(ClaudeStats {
         daily_usage,
         model_stats,
+        project_stats: Vec::new(),
         total_sessions,
         total_cost_usd: 0.0,
         trend_pct,
