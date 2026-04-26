@@ -20,7 +20,6 @@ use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher}
 use tauri::{Emitter, Manager, tray::TrayIconBuilder, menu::{Menu, MenuItem}};
 
 #[cfg(target_os = "macos")]
-use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 /// Width of the menubar popup window in logical pixels — must match `tauri.conf.json`.
 const WIN_WIDTH_PX: f64 = 440.0;
@@ -47,6 +46,13 @@ fn claude_stats_path() -> Option<std::path::PathBuf> {
     })
 }
 
+/// Returns the path to `~/.claude/projects/`, or `None` if `$HOME` is unset.
+fn claude_projects_path() -> Option<std::path::PathBuf> {
+    std::env::var("HOME").ok().map(|home| {
+        std::path::PathBuf::from(home).join(".claude").join("projects")
+    })
+}
+
 /// Returns the path to the Codex sessions directory.
 ///
 /// Uses `$CODEX_HOME/sessions` when `CODEX_HOME` is set, otherwise falls back
@@ -61,6 +67,122 @@ fn codex_sessions_path() -> Option<std::path::PathBuf> {
             .join(".codex")
             .join("sessions")
     })
+}
+
+// ── Claude session JSONL types ────────────────────────────────────────────────
+
+/// One line from a Claude session `.jsonl` file. Only fields needed for
+/// token aggregation are deserialized; everything else is ignored.
+#[derive(serde::Deserialize)]
+struct SessionLine {
+    #[serde(rename = "type")]
+    kind: String,
+    timestamp: Option<String>,
+    usage: Option<SessionUsage>,
+}
+
+#[derive(serde::Deserialize)]
+struct SessionUsage {
+    #[serde(default)]
+    input_tokens: u64,
+    #[serde(default)]
+    output_tokens: u64,
+    #[serde(default)]
+    cache_read_input_tokens: u64,
+    #[serde(default)]
+    cache_creation_input_tokens: u64,
+}
+
+/// Scans `~/.claude/projects/**/*.jsonl` for assistant messages within the
+/// last `days` calendar days and returns per-day token sums keyed by
+/// ISO date (`"YYYY-MM-DD"`). Tuple is `(input, output, cache)`.
+///
+/// Files are pre-filtered by `mtime` so only recent session files are opened.
+fn aggregate_claude_sessions(days: u32) -> HashMap<String, (u64, u64, u64)> {
+    let mut daily: HashMap<String, (u64, u64, u64)> = HashMap::new();
+
+    let projects_root = match claude_projects_path() {
+        Some(p) => p,
+        None => return daily,
+    };
+
+    let cutoff = std::time::SystemTime::now()
+        .checked_sub(Duration::from_secs(u64::from(days) * 86_400))
+        .unwrap_or(std::time::UNIX_EPOCH);
+
+    let project_dirs = match std::fs::read_dir(&projects_root) {
+        Ok(d) => d,
+        Err(_) => return daily,
+    };
+
+    for proj_entry in project_dirs.flatten() {
+        let proj_path = proj_entry.path();
+        if !proj_path.is_dir() {
+            continue;
+        }
+
+        let session_files = match std::fs::read_dir(&proj_path) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        for file_entry in session_files.flatten() {
+            let file_path = file_entry.path();
+            let fname = file_path
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or("");
+            if !fname.ends_with(".jsonl") {
+                continue;
+            }
+
+            // Skip files not modified within the window.
+            if let Ok(meta) = file_path.metadata() {
+                if let Ok(mtime) = meta.modified() {
+                    if mtime < cutoff {
+                        continue;
+                    }
+                }
+            }
+
+            let content = match std::fs::read_to_string(&file_path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            for line in content.lines() {
+                if line.is_empty() {
+                    continue;
+                }
+                let msg: SessionLine = match serde_json::from_str(line) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                if msg.kind != "assistant" {
+                    continue;
+                }
+                let usage = match msg.usage {
+                    Some(u) => u,
+                    None => continue,
+                };
+                let ts = match msg.timestamp {
+                    Some(t) => t,
+                    None => continue,
+                };
+                // ISO timestamp: "2026-04-18T20:11:33.757Z" → take first 10 chars
+                let date = ts.get(..10).unwrap_or("").to_string();
+                if date.is_empty() {
+                    continue;
+                }
+                let entry = daily.entry(date).or_insert((0, 0, 0));
+                entry.0 += usage.input_tokens;
+                entry.1 += usage.output_tokens;
+                entry.2 += usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
+            }
+        }
+    }
+
+    daily
 }
 
 // ── Stats-cache data types ────────────────────────────────────────────────────
@@ -178,22 +300,31 @@ fn get_claude_stats(days: Option<u32>) -> Result<ClaudeStats, String> {
     );
     let cum_total = cum_input + cum_output + cum_cache;
 
+    // Aggregate real per-type token counts from session JSONL files.
+    // Falls back to the cumulative-ratio estimate for days missing from JSONL.
+    let session_data = aggregate_claude_sessions(days.unwrap_or(30));
+
     // Build daily usage entries — sort by ISO date then keep the last 30 days.
     let mut daily = cache.daily_model_tokens;
     daily.sort_by(|a, b| a.date.cmp(&b.date));
     let mut entries: Vec<DailyUsage> = daily
         .iter()
         .map(|day| {
-            let total: u64 = day.tokens_by_model.values().sum();
-            let (inp, out, cac) = if cum_total > 0 {
-                #[allow(clippy::cast_possible_truncation)] // result ≤ total ≤ u64::MAX by construction
-                let inp = (u128::from(total) * u128::from(cum_input) / u128::from(cum_total)) as u64;
-                #[allow(clippy::cast_possible_truncation)] // result ≤ total ≤ u64::MAX by construction
-                let out = (u128::from(total) * u128::from(cum_output) / u128::from(cum_total)) as u64;
-                let cac = total - inp - out;
-                (inp, out, cac)
+            let (inp, out, cac) = if let Some(&(i, o, c)) = session_data.get(&day.date) {
+                (i, o, c)
             } else {
-                (total, 0, 0)
+                // Fallback: split day total using cumulative model-usage ratios.
+                let total: u64 = day.tokens_by_model.values().sum();
+                if cum_total > 0 {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let inp = (u128::from(total) * u128::from(cum_input) / u128::from(cum_total)) as u64;
+                    #[allow(clippy::cast_possible_truncation)]
+                    let out = (u128::from(total) * u128::from(cum_output) / u128::from(cum_total)) as u64;
+                    let cac = total.saturating_sub(inp + out);
+                    (inp, out, cac)
+                } else {
+                    (total, 0, 0)
+                }
             };
             DailyUsage {
                 date: format_date_label(&day.date),
@@ -755,19 +886,6 @@ pub fn run() {
                 });
             }
 
-            // Apply native vibrancy — gives a true system-compositor frosted-glass
-            // effect that outperforms CSS backdrop-blur on macOS.
-            #[cfg(target_os = "macos")]
-            if let Some(window) = app.get_webview_window("main") {
-                if let Err(e) = apply_vibrancy(
-                    &window,
-                    NSVisualEffectMaterial::HudWindow,
-                    None,
-                    Some(16.0),
-                ) {
-                    eprintln!("[ai-pulse] vibrancy unavailable: {e}");
-                }
-            }
 
             // Load the dedicated tray icon from the bundled PNG bytes.
             // Falls back to the default window icon if the file is missing.
@@ -1009,4 +1127,17 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn aggregate_claude_sessions_returns_empty_for_missing_dir() {
+        // aggregate_claude_sessions should return an empty map for a nonexistent HOME, not panic.
+        unsafe { std::env::set_var("HOME", "/tmp/nonexistent-ai-pulse-test-home-xyz"); }
+        let result = aggregate_claude_sessions(7);
+        assert!(result.is_empty());
+    }
 }
