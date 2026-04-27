@@ -312,13 +312,13 @@
       <div class="story-step">
         <div class="story-step-num">Step 02</div>
         <div class="story-step-tool">Claude Code <span class="tag tag-claude">CLI</span></div>
-        <p>Claude Code migrated the entire prototype codebase, wired the real data pipeline (Rust JSONL parsers, IPC commands, Zod schemas, Zustand store), and enforced strict TypeScript + Clippy pedantic throughout — running the pre-commit hook on every change.</p>
+        <p>Claude Code migrated the Gemini prototype into a production codebase — strict TypeScript, Zod schema validation, and Zustand state management, with the pre-commit hook enforcing Clippy pedantic on every change.</p>
       </div>
       <div class="story-divider">→</div>
       <div class="story-step">
         <div class="story-step-num">Step 03</div>
-        <div class="story-step-tool">Tauri v2 <span class="tag tag-tauri">Rust</span></div>
-        <p>Tauri v2 wraps the React frontend in a native macOS menubar app with a transparent vibrancy window, a tray icon, a global keyboard shortcut, launch-at-login via LaunchAgent, and a recursive file-system watcher that live-updates the dashboard.</p>
+        <div class="story-step-tool">Tauri v2 <span class="tag tag-tauri">Rust</span> + Claude Code <span class="tag tag-claude">CLI</span></div>
+        <p>The Rust backend — JSONL parsers, IPC commands, file-system watcher, tray icon, global shortcut, and LaunchAgent — was built using Tauri v2, guided by Claude Code. No Electron. Binary under 10 MB.</p>
       </div>
     </div>
   </div>
